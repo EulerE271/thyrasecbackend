@@ -60,6 +60,7 @@ func CreateDeposit(c *gin.Context) {
 	}
 
 	OrderNumber := orderno.GenerateOrderNumber()
+	fmt.Println(utils.GetHouseAccount(c))
 	houseAccountID, err := utils.GetHouseAccount(c)
 	if err != nil {
 		// Handle error
@@ -107,29 +108,35 @@ func CreateDeposit(c *gin.Context) {
 	}
 
 	//Update to remove fields from incorrect mappings
-	creditTransaction.AccountAsset1Id = uuid.Nil
 	creditTransaction.AmountAsset1 = nil
 	creditTransaction.Asset1Id = uuid.Nil
 
 	/* END OF PARENT */
 
 	var currentBalance float64
-	err = database.Get(&currentBalance, "SELECT account_balance FROM thyrasec.accounts WHERE account_holder_id = $1", userUUID)
+	err = database.Get(&currentBalance, "SELECT account_balance FROM thyrasec.accounts WHERE id = $1", debitTransaction.AccountAsset1Id)
 	if err != nil {
 		// Handle error, e.g., account not found or DB query failed
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch account balance", "details": err.Error()})
 		return
 	}
 
-	if *creditTransaction.AmountAsset1 > 0 {
-		currentBalance += float64(*creditTransaction.AmountAsset1)
+	if *debitTransaction.AmountAsset1 > 0 {
+		currentBalance += float64(*debitTransaction.AmountAsset1)
 	} else {
 		// Handle invalid amount
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid deposit amount"})
 		return
 	}
 
-	_, err = database.Exec("UPDATE thyrasec.accounts SET account_balance = $1, updated_at = $2 WHERE account_holder_id = $3", currentBalance, time.Now(), userUUID)
+	_, err = database.Exec("UPDATE thyrasec.accounts SET account_balance = $1, updated_at = $2 WHERE id = $3", currentBalance, time.Now(), debitTransaction.AccountAsset1Id)
+	if err != nil {
+		// Handle error, e.g., DB update failed
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
+		return
+	}
+
+	_, err = database.Exec("UPDATE thyrasec.accounts SET account_balance = $1, updated_at = $2 WHERE id = $3", currentBalance, time.Now(), creditTransaction.AccountAsset1Id)
 	if err != nil {
 		// Handle error, e.g., DB update failed
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
@@ -244,13 +251,10 @@ func CreateWithdrawal(c *gin.Context) {
 	}
 
 	//Update to remove fields from incorrect mappings
-	debitTransaction.AccountAsset1Id = uuid.Nil
 	debitTransaction.AmountAsset1 = nil
 	debitTransaction.Asset1Id = uuid.Nil
 
 	/* END OF PARENT */
-
-	/*gRCP calls for updating the account service */
 
 	if creditTransaction.AmountAsset1 != nil && *creditTransaction.AmountAsset1 > 0 {
 		*creditTransaction.AmountAsset1 = -*creditTransaction.AmountAsset1
@@ -268,11 +272,36 @@ func CreateWithdrawal(c *gin.Context) {
 		*debitTransaction.AmountAsset2 = -*debitTransaction.AmountAsset2
 	}
 
-	withdrawalAmount := 0.0
-	if creditTransaction.AmountAsset1 != nil {
-		withdrawalAmount = float64(*creditTransaction.AmountAsset1)
+	var currentBalance float64
+	fmt.Println("creditTransaction.AccountAsset1: %+v", creditTransaction.AccountAsset1Id)
+	err = database.Get(&currentBalance, "SELECT account_balance FROM thyrasec.accounts WHERE id = $1", creditTransaction.AccountAsset1Id)
+	if err != nil {
+		// Handle error, e.g., account not found or DB query failed
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch account balance", "details": err.Error()})
+		return
 	}
-	fmt.Println(withdrawalAmount)
+
+	if *creditTransaction.AmountAsset1 < 0 {
+		currentBalance += float64(*creditTransaction.AmountAsset1)
+	} else {
+		// Handle invalid amount
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid deposit amount"})
+		return
+	}
+
+	_, err = database.Exec("UPDATE thyrasec.accounts SET account_balance = $1, updated_at = $2 WHERE id = $3", currentBalance, time.Now(), creditTransaction.AccountAsset1Id)
+	if err != nil {
+		// Handle error, e.g., DB update failed
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
+		return
+	}
+
+	_, err = database.Exec("UPDATE thyrasec.accounts SET account_balance = $1, updated_at = $2 WHERE id = $3", currentBalance, time.Now(), debitTransaction.AccountAsset1Id)
+	if err != nil {
+		// Handle error, e.g., DB update failed
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
+		return
+	}
 
 	/*INSERTS INTO DATABASE */
 	//Inserts two parent transactions
