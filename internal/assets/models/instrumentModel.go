@@ -28,3 +28,44 @@ type Assets struct {
 	TypeName    string    `db:"type_name" json:"type_name"`
 	Description string    `db:"description" json:"description"`
 }
+
+type OrderStatusType string
+
+// Define constants for OrderStatusType
+const (
+	StatusCreated   OrderStatusType = "created"
+	StatusConfirmed OrderStatusType = "confirmed"
+	StatusPending   OrderStatusType = "pending"
+	StatusSettled   OrderStatusType = "settled"
+	StatusExecuted  OrderStatusType = "executed"
+	StatusCanceled  OrderStatusType = "canceled"
+)
+
+// Order represents an order in the database.
+type Order struct {
+	ID           uuid.UUID       `db:"id" json:"id"`
+	AccountID    uuid.UUID       `db:"account_id" json:"account_id"`
+	AssetID      uuid.UUID       `db:"asset_id" json:"asset_id"`
+	OrderType    string          `db:"order_type" json:"order_type"` // Consider making this an enum if you have a limited set of order types
+	Quantity     int             `db:"quantity" json:"quantity"`
+	PricePerUnit float64         `db:"price_per_unit" json:"price_per_unit,omitempty"` // omitempty will prevent zero value from being serialized
+	TotalAmount  float64         `db:"total_amount" json:"total_amount"`
+	Status       OrderStatusType `db:"status" json:"status"` // Using the defined OrderStatusType
+	CreatedAt    time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt    time.Time       `db:"updated_at" json:"updated_at"`
+}
+
+type OrderWithDetails struct {
+	Order                 // Embed the Order struct to include its fields
+	AccountNumber  string `db:"account_number" json:"account_number"`
+	InstrumentName string `db:"instrument_name" json:"instrument_name"`
+	InstrumentType string `db:"instrument_type" json:"instrument_type"`
+}
+
+// Holding represents a row in thyrasec.holdings table
+type Holding struct {
+	ID        uuid.UUID `db:"id"`
+	AccountID uuid.UUID `db:"account_id"`
+	AssetID   uuid.UUID `db:"asset_id"`
+	Quantity  int       `db:"quantity"`
+}
