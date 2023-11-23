@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS thyrasec.transaction_status
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT transaction_status_pkey PRIMARY KEY (status_id)
-)
+);
 -- +goose Down
 -- +goose StatementBegin
 SELECT 'down SQL query';

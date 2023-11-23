@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS thyrasec.transactions
     order_no text COLLATE pg_catalog."default",
     business_event uuid,
     CONSTRAINT transactions_pkey PRIMARY KEY (id)
-)
+);
 -- +goose Down
 -- +goose StatementBegin
 SELECT 'down SQL query';
