@@ -2,12 +2,14 @@ package main
 
 import (
 	"log"
+	"os"
 	accounts "thyra/internal/accounts/routes"
 	assets "thyra/internal/assets/routes"
 	"thyra/internal/common/db"
 	middle "thyra/internal/common/middleware"
 	transactions "thyra/internal/transactions/routes"
 	routes "thyra/internal/users/routes"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -17,10 +19,25 @@ import (
 
 func main() {
 
-	// Initialize the database connection
-	err := db.Initialize()
+	cwd, _ := os.Getwd()
+	log.Println("Current working directory:", cwd)
+
+	const maxRetries = 50
+	const retryInterval = 10 * time.Second
+
+	var err error
+	for i := 0; i < maxRetries; i++ {
+		err = db.Initialize()
+		if err == nil {
+			break
+		}
+
+		log.Printf("Failed to initialize the database (attempt %d/%d): %v", i+1, maxRetries, err)
+		time.Sleep(retryInterval)
+	}
+
 	if err != nil {
-		log.Fatalf("Failed to initialize the database: %v", err)
+		log.Fatalf("Failed to initialize the database after %d attempts: %v", maxRetries, err)
 	}
 
 	// Test database connection
