@@ -17,11 +17,14 @@ WORKDIR /app/cmd/webserver
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
-# Start a new stage from an Alpine base image
-FROM alpine:latest  
+# Start a new stage from a Debian base image
+FROM debian:slim  
 
-# Install Go, Git and other necessary packages
-RUN apk add --no-cache go git g++
+# Update the package list and install Git and other necessary packages
+RUN apt-get update && apt-get install -y git g++
+
+# Install Go
+RUN apt-get install -y golang-go
 
 # Install Goose directly in the final image
 RUN go install github.com/pressly/goose/v3/cmd/goose@latest
