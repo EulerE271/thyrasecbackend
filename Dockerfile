@@ -15,7 +15,9 @@ COPY . .
 WORKDIR /app/cmd/webserver
 
 # Install Goose
-RUN go get -u github.com/pressly/goose/cmd/goose
+RUN go get -u github.com/pressly/goose/cmd/goose && \
+    ls /go/bin/ && \
+    ls /usr/local/go/bin/
 
 # Copy migrations
 COPY /data/migrations /data/migrations
