@@ -31,7 +31,7 @@ WORKDIR /root/
 COPY --from=builder /app/cmd/webserver/main .
 
 
-COPY entrypoint.sh /entrypoint.sh
+COPY /scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 # Command to run the executable
