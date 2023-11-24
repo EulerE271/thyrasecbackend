@@ -20,8 +20,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 # Start a new stage from an Alpine base image
 FROM alpine:latest  
 
-# Install necessary packages for runtime
-RUN apk add --no-cache git g++
+# Install Go, Git and other necessary packages
+RUN apk add --no-cache go git g++
 
 # Install Goose directly in the final image
 RUN go install github.com/pressly/goose/v3/cmd/goose@latest
