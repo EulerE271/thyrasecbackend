@@ -79,7 +79,7 @@ func LoginHandler(c *gin.Context) {
 	}
 
 	fmt.Println("This is the token, right before it is set: %v", token)
-	c.SetCookie("token", token, 86400, "/", "http://dev.thyrasolutions.se", true, true)
+	c.SetCookie("token", token, 86400, "/", "dev.thyrasolutions.se", true, false)
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
