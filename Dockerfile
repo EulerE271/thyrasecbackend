@@ -14,6 +14,12 @@ COPY . .
 # Change to the directory containing main.go
 WORKDIR /app/cmd/webserver
 
+# Install Goose
+RUN go get -u github.com/pressly/goose/cmd/goose
+
+# Copy migrations
+COPY /data/migrations /data/migrations
+
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
@@ -24,5 +30,18 @@ WORKDIR /root/
 # Copy the binary from the builder stage
 COPY --from=builder /app/cmd/webserver/main .
 
-# Command to run the executable
+# Copy the Goose binary from the builder stage
+COPY --from=builder /go/bin/goose /usr/local/bin/goose
+
+# Set environment variables for Goose
+ENV GOOSE_DBSTRING="user=postgres password=root host=localhost dbname=thyrasec sslmode=disable"
+ENV GOOSE_DRIVER="postgres"
+
+# Copy the entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Set the entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]
+# Set the default command
 CMD ["./main"]
