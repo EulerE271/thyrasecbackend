@@ -78,6 +78,7 @@ func LoginHandler(c *gin.Context) {
 		return
 	}
 
+	fmt.Println("This is the token, right before it is set: %v", token)
 	c.SetCookie("token", token, 86400, "", "", false, true) // Secure flag set to false for HTTP (true for HTTPS)
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
