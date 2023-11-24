@@ -22,7 +22,7 @@ FROM alpine:latest
 
 # Install Goose in the final image
 RUN apk add --no-cache go && \
-    go get -u github.com/pressly/goose/cmd/goose && \
+    go install github.com/pressly/goose/v3/cmd/goose@latest && \
     apk del go
 
 WORKDIR /root/
