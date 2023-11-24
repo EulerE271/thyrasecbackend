@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/dgrijalva/jwt-go"
@@ -20,6 +21,7 @@ type Claims struct {
 func TokenMiddleware(c *gin.Context) {
 	// Extract the token from the cookie
 	tokenString, err := c.Cookie("token")
+	log.Printf(tokenString)
 	if err != nil {
 		// More specific error message
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Cookie 'token' not found", "details": err.Error()})
