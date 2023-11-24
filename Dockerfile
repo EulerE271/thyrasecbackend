@@ -20,10 +20,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 # Start a new stage from scratch
 FROM alpine:latest  
 
-# Install Goose in the final image
-RUN apk add --no-cache go && \
-    go install github.com/pressly/goose/v3/cmd/goose@latest && \
-    apk del go
+# Install dependencies required for runtime
+RUN apk add --no-cache libc6-compat
+
+# Copy Goose binary from builder stage
+COPY --from=builder /go/bin/goose /usr/local/bin/goose
 
 WORKDIR /root/
 
@@ -40,7 +41,6 @@ ENV GOOSE_DRIVER="postgres"
 # Copy the entrypoint script
 COPY /scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
 
-# Command to run the executable
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["./main"]
