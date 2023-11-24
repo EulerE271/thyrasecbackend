@@ -14,10 +14,11 @@ COPY . .
 # Change to the directory containing main.go
 WORKDIR /app/cmd/webserver
 
-# Install Goose
 RUN go get -u github.com/pressly/goose/cmd/goose && \
     ls /go/bin/ && \
-    ls /usr/local/go/bin/
+    ls /usr/local/go/bin/ && \
+    ls $GOPATH/bin/
+
 
 # Copy migrations
 COPY /data/migrations /data/migrations
@@ -33,7 +34,7 @@ WORKDIR /root/
 COPY --from=builder /app/cmd/webserver/main .
 
 # Copy the Goose binary from the builder stage
-COPY --from=builder /go/bin/goose /usr/local/bin/goose
+COPY --from=builder $GOPATH/bin/goose /usr/local/bin/goose
 
 # Set environment variables for Goose
 ENV GOOSE_DBSTRING="user=postgres password=root host=localhost dbname=thyrasec sslmode=disable"
