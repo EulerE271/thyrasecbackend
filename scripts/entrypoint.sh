@@ -3,6 +3,7 @@ cd /data/migrations
 
 # Run Goose migrations
 goose up
+echo "PATH is $PATH"
 
 cd /root/
 
