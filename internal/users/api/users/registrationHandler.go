@@ -95,3 +95,11 @@ func RegisterCustomerHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Registration successful for customer"})
 }
+
+func CookieTestHandler(c *gin.Context) {
+	// Set a test cookie
+	c.SetCookie("testcookiereghandler", "testvaluereghandler", 86400, "/", "dev.thyrasolutions.se", true, false)
+
+	// Send a simple response
+	c.JSON(http.StatusOK, gin.H{"message": "Test cookie set"})
+}

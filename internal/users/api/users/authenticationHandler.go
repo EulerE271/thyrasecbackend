@@ -3,7 +3,6 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 	"thyra/internal/common/db"
 	"time"
@@ -53,10 +52,8 @@ func LoginHandler(c *gin.Context) {
 		err = dbConn.QueryRow(query, loginRequest.Username).Scan(&userID, &storedPassword)
 		if err == nil {
 			userType = uType
-			log.Printf("User found in %s table with ID %s", table, userID)
 			break
 		} else if err != sql.ErrNoRows {
-			log.Printf("Error querying %s table: %v", table, err)
 			break // Exit the loop on error other than ErrNoRows
 		}
 	}
@@ -79,6 +76,7 @@ func LoginHandler(c *gin.Context) {
 	}
 
 	fmt.Println("This is the token, right before it is set: %v", token)
+	c.SetCookie("testcookieinauthhandler", "testvalueauthandller", 86400, "/", "dev.thyrasolutions.se", true, false)
 	c.SetCookie("token", token, 86400, "/", "dev.thyrasolutions.se", true, false)
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
