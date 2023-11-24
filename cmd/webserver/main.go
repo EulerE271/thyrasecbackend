@@ -58,8 +58,9 @@ func main() {
 	// Configure CORS middleware
 	config := cors.Config{
 		AllowOrigins:     []string{"*"}, // Replace with your frontend's URL
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
+		AllowMethods:     []string{"POST", "OPTIONS", "GET", "PUT", "DELETE"},
 		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type", "Content-Length", "X-CSRF-Token", "Token", "session", "Origin", "Host", "Connection", "Accept-Encoding", "Accept-Language", "X-Requested-With"},
+		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 	}
 
