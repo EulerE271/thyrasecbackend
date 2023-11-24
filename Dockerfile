@@ -8,6 +8,13 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Install Goose
+RUN go install github.com/pressly/goose/v3/cmd/goose@latest
+
+# Find where Goose is installed
+RUN ls -l $GOPATH/bin
+RUN ls -l /go/bin
+
 # Copy the entire project
 COPY . .
 
@@ -20,10 +27,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 # Start a new stage from scratch
 FROM alpine:latest  
 
-# Install dependencies required for runtime
-RUN apk add --no-cache libc6-compat
-
 # Copy Goose binary from builder stage
+# Update this line with the correct location of Goose
 COPY --from=builder /go/bin/goose /usr/local/bin/goose
 
 WORKDIR /root/
