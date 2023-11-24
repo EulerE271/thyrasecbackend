@@ -8,13 +8,6 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Install Goose
-RUN go install github.com/pressly/goose/v3/cmd/goose@latest
-
-# Find where Goose is installed
-RUN ls -l $GOPATH/bin
-RUN ls -l /go/bin
-
 # Copy the entire project
 COPY . .
 
@@ -24,17 +17,17 @@ WORKDIR /app/cmd/webserver
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
-# Start a new stage from scratch
+# Start a new stage from an Alpine base image
 FROM alpine:latest  
 
-# Copy Goose binary from builder stage
-# Update this line with the correct location of Goose
-COPY --from=builder /go/bin/goose /usr/local/bin/goose
+# Install necessary packages for runtime
+RUN apk add --no-cache git g++
 
-WORKDIR /root/
+# Install Goose directly in the final image
+RUN go install github.com/pressly/goose/v3/cmd/goose@latest
 
-# Copy the binary from the builder stage
-COPY --from=builder /app/cmd/webserver/main .
+# Copy the main application binary from the builder stage
+COPY --from=builder /app/cmd/webserver/main /root/main
 
 # Copy migrations
 COPY /data/migrations /data/migrations
@@ -48,4 +41,4 @@ COPY /scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["./main"]
+CMD ["/root/main"]
