@@ -14,37 +14,33 @@ COPY . .
 # Change to the directory containing main.go
 WORKDIR /app/cmd/webserver
 
-RUN go get -u github.com/pressly/goose/cmd/goose && \
-    ls /go/bin/ && \
-    ls /usr/local/go/bin/ && \
-    ls $GOPATH/bin/
-
-
-# Copy migrations
-COPY /data/migrations /data/migrations
-
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
 # Start a new stage from scratch
 FROM alpine:latest  
+
+# Install Goose in the final image
+RUN apk add --no-cache go && \
+    go get -u github.com/pressly/goose/cmd/goose && \
+    apk del go
+
 WORKDIR /root/
 
 # Copy the binary from the builder stage
 COPY --from=builder /app/cmd/webserver/main .
 
-# Copy the Goose binary from the builder stage
-COPY --from=builder $GOPATH/bin/goose /usr/local/bin/goose
+# Copy migrations
+COPY /data/migrations /data/migrations
 
 # Set environment variables for Goose
 ENV GOOSE_DBSTRING="user=postgres password=root host=localhost dbname=thyrasec sslmode=disable"
 ENV GOOSE_DRIVER="postgres"
 
 # Copy the entrypoint script
-COPY /scripts/entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-
-# Set the entrypoint script
 ENTRYPOINT ["/entrypoint.sh"]
-# Set the default command
+
+# Command to run the executable
 CMD ["./main"]
