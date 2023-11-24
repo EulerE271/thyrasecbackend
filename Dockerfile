@@ -38,7 +38,7 @@ ENV GOOSE_DBSTRING="user=postgres password=root host=localhost dbname=thyrasec s
 ENV GOOSE_DRIVER="postgres"
 
 # Copy the entrypoint script
-COPY entrypoint.sh /entrypoint.sh
+COPY /scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
