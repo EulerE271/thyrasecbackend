@@ -10,7 +10,7 @@ import (
 func SetupRoutes(router *gin.Engine) {
 	// Public route
 	router.POST("/login", handlers.LoginHandler) // This route is public and outside the protected group
-	router.GET("/api/cookie-test", handlers.CookieTestHandler)
+	router.GET("/cookie-test", handlers.CookieTestHandler)
 	// Group for version 1 APIs with Token Middleware
 	v1 := router.Group("/v1")
 	v1.Use(middleware.TokenMiddleware) // Apply token middleware to all routes in this group
