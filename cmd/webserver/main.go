@@ -57,7 +57,7 @@ func main() {
 
 	// Configure CORS middleware
 	config := cors.Config{
-		AllowOrigins:     []string{"http://dev.thyrasolutions.se"}, // Replace with your frontend's URL
+		AllowOrigins:     []string{"https://dev.thyrasolutions.se"}, // Replace with your frontend's URL
 		AllowMethods:     []string{"POST", "OPTIONS", "GET", "PUT", "DELETE"},
 		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type", "Content-Length", "X-CSRF-Token", "Token", "session", "Origin", "Host", "Connection", "Accept-Encoding", "Accept-Language", "X-Requested-With"},
 		ExposeHeaders:    []string{"Content-Length"},
