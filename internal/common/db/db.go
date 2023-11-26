@@ -13,7 +13,7 @@ var db *sqlx.DB
 
 func Initialize() error {
 
-	err := godotenv.Load("/app/.env") // This goes two levels up from /cmd/webserver
+	err := godotenv.Load("../../.env") // This goes two levels up from /cmd/webserver
 	if err != nil {
 		return fmt.Errorf("Error loading .env file")
 	}

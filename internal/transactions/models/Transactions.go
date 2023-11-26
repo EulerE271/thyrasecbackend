@@ -95,6 +95,7 @@ type TransactionDisplay struct {
 	StatusID                 uuid.UUID `json:"status_id" db:"status_id"`
 	Description              string    `json:"description" db:"description"`
 	TypeID                   uuid.UUID `json:"type_id" db:"type_id"`
+	AccountNumber            string    `json:"account_number" db:"account_number"`
 }
 
 //Model for returning transaction types as defined in transaction_types table

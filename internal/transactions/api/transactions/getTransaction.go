@@ -34,19 +34,23 @@ func GetTransactionByUserHandler(c *gin.Context) {
 	}
 
 	// Fetching transactions for the user directly within the handler
-	query := `SELECT
-	*,
-	tt.transaction_type_name,
-    ts.status_label
-FROM 
-    thyrasec.transactions t
-LEFT JOIN 
-    thyrasec.transactions_types tt ON t.type = tt.type_id
-LEFT JOIN 
-    thyrasec.transaction_status ts ON t.status_transaction = ts.status_id
-WHERE 
-    t.account_owner_id = $1;
-`
+	query := `
+    SELECT
+        t.*,
+        tt.transaction_type_name,
+        ts.status_label,
+        a.account_number
+    FROM 
+        thyrasec.transactions t
+    LEFT JOIN 
+        thyrasec.transactions_types tt ON t.type = tt.type_id
+    LEFT JOIN 
+        thyrasec.transaction_status ts ON t.status_transaction = ts.status_id
+    LEFT JOIN
+        thyrasec.accounts a ON t.account_owner_id = a.id
+    WHERE 
+        t.account_owner_id = $1;
+    `
 	var transactions []models.TransactionDisplay
 	if err := db.Select(&transactions, query, targetUserID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve transactions", "details": err.Error()})

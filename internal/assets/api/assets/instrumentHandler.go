@@ -119,7 +119,7 @@ func GetAllAssetTypes(c *gin.Context) {
 	sqlxDB, _ := db.(*sqlx.DB)
 
 	query := "SELECT * FROM asset_types"
-	var assets []models.Assets
+	var assets []models.Asset
 	if err := sqlxDB.Select(&assets, query); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch asset types", "error": err.Error()})
 		return

@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.RouterGroup) {
+func SetupRoutes(router *gin.RouterGroup, holdingsHandler *handlers.HoldingsHandler) {
 
 	router.GET("/instruments", handlers.GetAllInstruments)
 	router.GET("/types/asset", handlers.GetAllAssetTypes)
@@ -17,5 +17,7 @@ func SetupRoutes(router *gin.RouterGroup) {
 	router.PUT("/orders/:orderId/confirm", handlers.ConfirmOrderHandler)
 	router.PUT("/orders/:orderId/execute", handlers.ExecuteOrderHandler)
 	router.PUT("/orders/:orderId/settle", handlers.SettlementHandler)
+
+	router.GET("/account/:accountId/holdings", holdingsHandler.GetAccountHoldingsWithDetails)
 
 }

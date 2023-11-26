@@ -23,12 +23,6 @@ type Instrument struct {
 	UpdatedAt      time.Time `db:"updated_at" json:"updated_at"`
 }
 
-type Assets struct {
-	Id          uuid.UUID `db:"id" json:"id"`
-	TypeName    string    `db:"type_name" json:"type_name"`
-	Description string    `db:"description" json:"description"`
-}
-
 type OrderStatusType string
 
 // Define constants for OrderStatusType
@@ -60,12 +54,4 @@ type OrderWithDetails struct {
 	AccountNumber  string `db:"account_number" json:"account_number"`
 	InstrumentName string `db:"instrument_name" json:"instrument_name"`
 	InstrumentType string `db:"instrument_type" json:"instrument_type"`
-}
-
-// Holding represents a row in thyrasec.holdings table
-type Holding struct {
-	ID        uuid.UUID `db:"id"`
-	AccountID uuid.UUID `db:"account_id"`
-	AssetID   uuid.UUID `db:"asset_id"`
-	Quantity  int       `db:"quantity"`
 }

@@ -7,7 +7,7 @@ import (
 )
 
 type Account struct {
-	Id                  uuid.UUID `db:"id" json:"uuid"`
+	Id                  uuid.UUID `db:"id" json:"id"`
 	AccountName         string    `db:"account_name" json:"account_name"`
 	AccountType         uuid.UUID `db:"account_type" json:"account_type"`
 	AccountOwnerCompany bool      `db:"account_owner_company" json:"account_owner_company"`
