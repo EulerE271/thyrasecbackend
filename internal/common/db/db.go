@@ -12,8 +12,16 @@ import (
 var db *sqlx.DB
 
 func Initialize() error {
+	var envFile string
 
-	err := godotenv.Load("/app/.env") // This goes two levels up from /cmd/webserver
+	// Check if running in production environment
+	if os.Getenv("ENV") == "production" {
+		envFile = "/app/.env" // Production .env path
+	} else {
+		envFile = "../../.env" // Default to this path for local development
+	}
+
+	err := godotenv.Load(envFile)
 	if err != nil {
 		return fmt.Errorf("Error loading .env file")
 	}

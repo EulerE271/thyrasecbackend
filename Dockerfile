@@ -27,6 +27,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 FROM alpine:latest  
 WORKDIR /root/
 
+ENV ENV=production
+
 # Copy the binary from the builder stage
 COPY --from=builder /app/cmd/webserver/main .
 
