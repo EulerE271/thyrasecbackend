@@ -3,8 +3,14 @@ package main
 import (
 	"log"
 	"os"
+	accountHandlers "thyra/internal/accounts/api/accounts"
+	repository "thyra/internal/accounts/repositories"
 	accounts "thyra/internal/accounts/routes"
+	account "thyra/internal/accounts/services"
+	assetHandlers "thyra/internal/assets/api/assets"
+	"thyra/internal/assets/repositories" // Replace with the actual path to your repositories
 	assets "thyra/internal/assets/routes"
+	"thyra/internal/assets/services" // Replace with the actual path to your services
 	"thyra/internal/common/db"
 	middle "thyra/internal/common/middleware"
 	transactions "thyra/internal/transactions/routes"
@@ -68,13 +74,21 @@ func main() {
 
 	v1 := r.Group("/v1")
 
+	repo := repositories.NewHoldingsRepository(db.GetDB())
+	service := services.NewHoldingsService(repo)
+	holdingsHandler := assetHandlers.NewHoldingsHandler(service)
+
+	accountValueRepo := repository.NewAccountValueRepository(db.GetDB().DB)            // If renamed
+	accountValueService := account.NewAccountValueService(accountValueRepo)            // If renamed
+	accountValueHandler := accountHandlers.NewAccountValueHandler(accountValueService) // If renamed
+
 	routes.SetupRoutes(r)
 	v1.Use(middle.DBContext())
 	v1.Use(middle.TokenMiddleware)
 	// Setup module-specific routes
 	transactions.SetupRoutes(v1) // Setup rout
-	accounts.SetupRoutes(v1)
-	assets.SetupRoutes(v1)
+	accounts.SetupRoutes(v1, accountValueHandler)
+	assets.SetupRoutes(v1, holdingsHandler)
 
 	// Set up your routes by calling the SetupRoutes function from the "routes" package
 
