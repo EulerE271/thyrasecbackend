@@ -68,7 +68,7 @@ func performScheduledTasks(db *sqlx.DB) {
 			continue
 		}
 
-		err = CalculateAndStorePerformance(tx, accountID, snapshotDate)
+		err = CalculateAndStoreHoldings(tx, accountID, snapshotDate)
 		if err != nil {
 			tx.Rollback()
 			log.Printf("Failed to calculate and store performance for account %s: %v", accountID, err)
@@ -78,13 +78,68 @@ func performScheduledTasks(db *sqlx.DB) {
 	}
 }
 
-type AccountSnapshot struct {
+type HoldingSnapshot struct {
+	SnapshotID   uuid.UUID `db:"snapshotid"` // Assuming you want to handle this in Go
 	AccountID    uuid.UUID `db:"account_id"`
+	AssetID      uuid.UUID `db:"asset_id"`
+	Quantity     float64   `db:"quantity"`
 	SnapshotDate time.Time `db:"snapshot_date"`
-	TotalValue   float64   `db:"total_value"`
+}
+type Holding struct {
+	AssetID  uuid.UUID `db:"asset_id"`
+	Quantity float64   `db:"quantity"`
 }
 
-func CalculateAndStorePerformance(tx *sqlx.Tx, accountID uuid.UUID, snapshotDate time.Time) error {
+func CalculateAndStoreHoldings(tx *sqlx.Tx, accountID uuid.UUID, snapshotDate time.Time) error {
+	holdings, err := fetchHoldings(tx, accountID)
+	if err != nil {
+		return fmt.Errorf("error fetching holdings for account %s: %v", accountID, err)
+	}
+
+	for _, holding := range holdings {
+		snapshot := HoldingSnapshot{
+			AccountID:    accountID,
+			AssetID:      holding.AssetID,
+			Quantity:     holding.Quantity,
+			SnapshotDate: snapshotDate,
+		}
+
+		query := "INSERT INTO thyrasec.holdings_snapshots (account_id, asset_id, quantity, snapshot_date) VALUES ($1, $2, $3, $4)"
+		_, err = tx.Exec(query, snapshot.AccountID, snapshot.AssetID, snapshot.Quantity, snapshot.SnapshotDate)
+		if err != nil {
+			// Handle the error gracefully, log it, and continue to the next iteration
+			log.Printf("Error inserting snapshot for asset %s in account %s: %v", holding.AssetID, accountID, err)
+		}
+	}
+
+	return nil
+}
+
+func fetchHoldings(tx *sqlx.Tx, accountID uuid.UUID) ([]Holding, error) {
+	var holdings []Holding
+
+	query := "SELECT asset_id, quantity FROM thyrasec.holdings WHERE account_id = $1"
+	err := tx.Select(&holdings, query, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching holdings for account %s: %v", accountID, err)
+	}
+
+	return holdings, nil
+}
+
+func fetchAllAccounts(db *sqlx.DB) ([]uuid.UUID, error) {
+	var accountIDs []uuid.UUID
+
+	query := "SELECT id FROM thyrasec.accounts"
+	err := db.Select(&accountIDs, query)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching account IDs: %v", err)
+	}
+
+	return accountIDs, nil
+}
+
+/*func CalculateAndStorePerformance(tx *sqlx.Tx, accountID uuid.UUID, snapshotDate time.Time) error {
 	totalValue, err := calculateTotalValue(tx, accountID, snapshotDate) // pass 'tx' as the first argument
 	if err != nil {
 		return fmt.Errorf("error calculating total value: %v", err)
@@ -109,7 +164,7 @@ func calculateTotalValue(tx *sqlx.Tx, accountID uuid.UUID, snapshotDate time.Tim
 
 	// Query to calculate the total value of holdings based on the snapshot date
 	query := `
-    SELECT COALESCE(SUM(h.quantity * p.current_price), 0) 
+    SELECT COALESCE(SUM(h.quantity * p.current_price), 0)
     FROM thyrasec.holdings AS h
     INNER JOIN thyrasec.assets AS p ON h.asset_id = p.id
     WHERE h.account_id = $1`
@@ -120,16 +175,4 @@ func calculateTotalValue(tx *sqlx.Tx, accountID uuid.UUID, snapshotDate time.Tim
 	}
 
 	return totalValue, nil
-}
-
-func fetchAllAccounts(db *sqlx.DB) ([]uuid.UUID, error) {
-	var accountIDs []uuid.UUID
-
-	query := "SELECT id FROM thyrasec.accounts"
-	err := db.Select(&accountIDs, query)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching account IDs: %v", err)
-	}
-
-	return accountIDs, nil
-}
+}*/

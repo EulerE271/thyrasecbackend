@@ -6,7 +6,7 @@ import (
 	accountHandlers "thyra/internal/accounts/api/accounts"
 	repository "thyra/internal/accounts/repositories"
 	accounts "thyra/internal/accounts/routes"
-	account "thyra/internal/accounts/services"
+	accountServices "thyra/internal/accounts/services"
 	assetHandlers "thyra/internal/assets/api/assets"
 	"thyra/internal/assets/repositories" // Replace with the actual path to your repositories
 	assets "thyra/internal/assets/routes"
@@ -82,15 +82,24 @@ func main() {
 	holdingsHandler := assetHandlers.NewHoldingsHandler(service)
 
 	accountValueRepo := repository.NewAccountValueRepository(db.GetDB().DB)            // If renamed
-	accountValueService := account.NewAccountValueService(accountValueRepo)            // If renamed
+	accountValueService := accountServices.NewAccountValueService(accountValueRepo)    // If renamed
 	accountValueHandler := accountHandlers.NewAccountValueHandler(accountValueService) // If renamed
 
+	accountPerformanceRepo := repository.NewAccountPerformanceRepository(db.GetDB().DB)
+
+	// Initialize the AccountPerformanceService
+	accountPerformanceService := accountServices.NewAccountPerformanceService(accountPerformanceRepo)
+
+	// Initialize the AccountHandler
+	accountPerformanceHandler := accountHandlers.NewAccountPerformanceHandler(accountPerformanceService)
+
+	// Setup routes
 	routes.SetupRoutes(r)
 	v1.Use(middle.DBContext())
 	v1.Use(middle.TokenMiddleware)
 	// Setup module-specific routes
 	transactions.SetupRoutes(v1) // Setup rout
-	accounts.SetupRoutes(v1, accountValueHandler)
+	accounts.SetupRoutes(v1, accountValueHandler, accountPerformanceHandler)
 	assets.SetupRoutes(v1, holdingsHandler)
 
 	// Set up your routes by calling the SetupRoutes function from the "routes" package
