@@ -45,7 +45,7 @@ func CreateReservationAndDeductHoldings(db *sqlx.DB, order models.Order) error {
 		return err
 	}
 
-	if availableQuantity < order.Quantity {
+	if float64(availableQuantity) < order.Quantity {
 		tx.Rollback()
 		return errors.New("insufficient holdings")
 	}
@@ -58,7 +58,7 @@ func CreateReservationAndDeductHoldings(db *sqlx.DB, order models.Order) error {
 	}
 
 	// Deduct from holdings
-	if err := repositories.DeductHoldings(tx, order.AccountID, order.AssetID, order.Quantity); err != nil {
+	if err := repositories.DeductHoldings(tx, order.AccountID, order.AssetID, int(order.Quantity)); err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -105,7 +105,7 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 			tx.Rollback()
 			return err
 		}
-		if availableQuantity < order.Quantity {
+		if float64(availableQuantity) < order.Quantity {
 			tx.Rollback()
 			return errors.New("insufficient holdings for sell order")
 		}
@@ -165,7 +165,7 @@ func ExecuteOrder(db *sqlx.DB, orderID string) error {
 			tx.Rollback()
 			return err
 		}
-		if availableQuantity < order.Quantity {
+		if float64(availableQuantity) < order.Quantity {
 			tx.Rollback()
 			return errors.New("insufficient holdings for sell order")
 		}

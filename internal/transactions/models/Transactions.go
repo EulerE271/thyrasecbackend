@@ -15,8 +15,8 @@ type Transaction struct {
 	Asset2Id           uuid.UUID `json:"asset2_id" db:"asset2_id"`                 // Nullable field
 	AccountAsset1Id    uuid.UUID `json:"account_asset1_id" db:"account_asset1_id"` // Nullable field
 	AccountAsset2Id    uuid.UUID `json:"account_asset2_id" db:"account_asset2_id"` // Nullable field
-	AmountAsset1       *int      `json:"amount_asset1" db:"amount_asset1"`         // Nullable field
-	AmountAsset2       *int      `json:"amount_asset2" db:"amount_asset2"`         // Nullable field
+	AmountAsset1       float64   `json:"amount_asset1" db:"amount_asset1"`         // Nullable field
+	AmountAsset2       float64   `json:"amount_asset2" db:"amount_asset2"`         // Nullable field
 	CreatedById        uuid.UUID `json:"created_by_id" db:"created_by_id"`
 	UpdatedById        uuid.UUID `json:"updated_by_id" db:"updated_by_id"`
 	CreatedAt          time.Time `json:"created_at" db:"created_at"`

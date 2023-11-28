@@ -6,6 +6,9 @@ import (
 	"thyra/internal/assets/repositories"
 	"thyra/internal/assets/services"
 	"thyra/internal/common/db"
+	transactionModel "thyra/internal/transactions/models"
+	transactionRepository "thyra/internal/transactions/repositories"
+	transactionServices "thyra/internal/transactions/services" // using alias
 	"thyra/internal/transactions/utils"
 	"time"
 
@@ -214,8 +217,16 @@ func ExecuteOrderHandler(c *gin.Context) {
 func SettlementHandler(c *gin.Context) {
 	orderID := c.Param("orderId")
 
-	db, _ := c.Get("db")
-	sqlxDB, _ := db.(*sqlx.DB)
+	db, exists := c.Get("db")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection not found"})
+		return
+	}
+	sqlxDB, ok := db.(*sqlx.DB)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid database connection"})
+		return
+	}
 
 	// Get the order from the database
 	order, err := repositories.GetOrder(sqlxDB, orderID)
@@ -226,31 +237,82 @@ func SettlementHandler(c *gin.Context) {
 
 	// Ensure that the order is in the correct state
 	if order.Status != models.StatusExecuted {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Order cannot be settled in its current state", "error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Order cannot be settled in its current state"})
+		return
+	}
+
+	transactionRepo := transactionRepository.NewTransactionRepository(sqlxDB)
+	transactionService := transactionServices.NewTransactionService(transactionRepo)
+
+	userUUID := order.AccountID // Assuming AccountID is the user's UUID
+	comment := "Cash transaction for order settlement"
+
+	// Define the cash and instrument transactions
+	cashTransaction := &transactionModel.Transaction{
+		Id:                 uuid.New(),
+		Type:               uuid.New(), // Replace with actual transaction type
+		CreatedById:        userUUID,
+		UpdatedById:        userUUID,
+		Asset1Id:           uuid.New(), // Replace with actual cash asset ID
+		AmountAsset1:       float64(order.TotalAmount),
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+		StatusTransaction:  uuid.New(), // Replace with actual status
+		TransactionOwnerId: order.OwnerID,
+		AccountOwnerId:     order.AccountID,
+		Trade_date:         order.TradeDate,
+		Settlement_date:    order.SettlementDate,
+		Comment:            &comment,
+	}
+
+	instrumentTransaction := &transactionModel.Transaction{
+		Id:                 uuid.New(),
+		Type:               uuid.New(), // Replace with actual transaction type
+		CreatedById:        userUUID,
+		UpdatedById:        userUUID,
+		Asset1Id:           order.AssetID,
+		AmountAsset1:       order.Quantity,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+		StatusTransaction:  uuid.New(), // Replace with actual status
+		TransactionOwnerId: order.OwnerID,
+		AccountOwnerId:     order.AccountID,
+		Trade_date:         order.TradeDate,
+		Settlement_date:    order.SettlementDate,
+		Comment:            &comment,
+	}
+
+	_, _, err = transactionService.CreateInstrumentPurchaseTransaction(c, userUUID.String(), cashTransaction, instrumentTransaction)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create transaction", "details": err.Error()})
 		return
 	}
 
 	// Release the reservation
-	if err := repositories.ReleaseReservation(sqlxDB, orderID); err != nil {
+	err = repositories.ReleaseReservation(sqlxDB, orderID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to release reservation", "details": err.Error()})
 		return
 	}
 
-	// Update account balance - modify as per your application logic
-	if err := repositories.UpdateAccountBalance(sqlxDB, order.AccountID, order.TotalAmount); err != nil {
+	// Update account balance
+	err = repositories.UpdateAccountBalance(sqlxDB, order.AccountID, order.TotalAmount)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
 		return
 	}
 
-	// Insert into holding - create a holding object from order details
+	// Insert into holding
 	holding := models.Holding{
 		ID:        uuid.New(),
 		AccountID: order.AccountID,
 		AssetID:   order.AssetID,
 		Quantity:  order.Quantity,
+		// Populate other fields as needed
 	}
 
-	if err := repositories.InsertHolding(sqlxDB, holding); err != nil {
+	err = repositories.InsertHolding(sqlxDB, holding)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert into holding", "details": err.Error()})
 		return
 	}

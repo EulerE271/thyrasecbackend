@@ -68,3 +68,13 @@ func (r *transactionRepository) GetAccountAvailableBalance(accountID uuid.UUID) 
 
 	return availableBalance, nil
 }
+
+func (r *transactionRepository) GetAccountAvailableIinstrument(accountID uuid.UUID, instrumentID uuid.UUID) (float64, error) {
+	var availableQuantity float64
+	err := r.db.QueryRow("SELECT quantity FROM holdings WHERE account_id = $1 AND asset_id = $2", accountID, instrumentID).Scan(&availableQuantity)
+	if err != nil {
+		return 0, err
+	}
+
+	return availableQuantity, nil
+}

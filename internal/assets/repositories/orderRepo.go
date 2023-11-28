@@ -24,7 +24,7 @@ func InsertReservation(tx *sqlx.Tx, order models.Order, reservedUntil time.Time)
 		OrderID:       order.ID,
 		AccountID:     order.AccountID,
 		AssetID:       order.AssetID,
-		Quantity:      order.Quantity,
+		Quantity:      int(order.Quantity),
 		ReservedUntil: reservedUntil,
 		Status:        "reserved",
 	}
