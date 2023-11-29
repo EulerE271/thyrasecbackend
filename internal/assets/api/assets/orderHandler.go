@@ -93,8 +93,8 @@ func CreateBuyOrderHandler(c *gin.Context) {
 	}
 
 	// Insert the order into the database.
-	stmt := `INSERT INTO thyrasec.orders (id, account_id, asset_id, order_type, quantity, price_per_unit, total_amount, status, created_at, updated_at) 
-              VALUES (:id, :account_id, :asset_id, :order_type, :quantity, :price_per_unit, :total_amount, :status, NOW(), NOW())`
+	stmt := `INSERT INTO thyrasec.orders (id, account_id, asset_id, order_type, quantity, price_per_unit, total_amount, status, created_at, updated_at, trade_date, settlement_date, owner_id, comment) 
+              VALUES (:id, :account_id, :asset_id, :order_type, :quantity, :price_per_unit, :total_amount, :status, NOW(), NOW(), :trade_date, :settlement_date, :owner_id, :comment)`
 	_, err = tx.NamedExec(stmt, newOrder)
 	if err != nil {
 		tx.Rollback()
@@ -247,6 +247,8 @@ func SettlementHandler(c *gin.Context) {
 	userUUID := order.AccountID // Assuming AccountID is the user's UUID
 	comment := "Cash transaction for order settlement"
 
+	amountAsset1 := order.TotalAmount
+	orderQuantity := order.Quantity
 	// Define the cash and instrument transactions
 	cashTransaction := &transactionModel.Transaction{
 		Id:                 uuid.New(),
@@ -254,7 +256,7 @@ func SettlementHandler(c *gin.Context) {
 		CreatedById:        userUUID,
 		UpdatedById:        userUUID,
 		Asset1Id:           uuid.New(), // Replace with actual cash asset ID
-		AmountAsset1:       float64(order.TotalAmount),
+		AmountAsset1:       &amountAsset1,
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 		StatusTransaction:  uuid.New(), // Replace with actual status
@@ -271,7 +273,7 @@ func SettlementHandler(c *gin.Context) {
 		CreatedById:        userUUID,
 		UpdatedById:        userUUID,
 		Asset1Id:           order.AssetID,
-		AmountAsset1:       order.Quantity,
+		AmountAsset1:       &orderQuantity,
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 		StatusTransaction:  uuid.New(), // Replace with actual status

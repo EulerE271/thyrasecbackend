@@ -122,7 +122,7 @@ func (s *TransactionService) CreateDeposit(c *gin.Context, userID string, transa
 		Settlement_date:    creditTransaction.Settlement_date,
 	}
 
-	creditTransaction.AmountAsset1 = 0
+	creditTransaction.AmountAsset1 = nil
 	creditTransaction.AccountAsset1Id = uuid.Nil
 	creditTransaction.Asset1Id = uuid.Nil
 
@@ -147,12 +147,33 @@ func (s *TransactionService) CreateDeposit(c *gin.Context, userID string, transa
 	}
 
 	/* CALCULATES BALANCE FOR CUSTOMER */
-	newBalance := currentBalance + transactionData.AmountAsset1
-	availableBalance := currentAvailableBalance + transactionData.AmountAsset1
+	var newBalance float64
+	if transactionData.AmountAsset1 != nil {
+		newBalance = currentBalance + *transactionData.AmountAsset1
+	} else {
+		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
+		newBalance = currentBalance
+	}
+	var availableBalance float64
+	if transactionData.AmountAsset1 != nil {
+		availableBalance = currentAvailableBalance + *transactionData.AmountAsset1
+	} else {
+		availableBalance = currentAvailableBalance
+	}
 
-	/* CALCULATES BALANCE FOR HOUSE */
-	newBalanceHouse := currentBalanceHouse + transactionData.AmountAsset1
-	availableBalanceHouse := currentAvailableBalanceHouse + transactionData.AmountAsset1
+	var newBalanceHouse float64
+	if transactionData.AmountAsset1 != nil {
+		newBalanceHouse = currentBalanceHouse + *transactionData.AmountAsset1
+	} else {
+		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
+		newBalanceHouse = currentBalanceHouse
+	}
+	var availableBalanceHouse float64
+	if transactionData.AmountAsset1 != nil {
+		availableBalanceHouse = currentAvailableBalanceHouse + *transactionData.AmountAsset1
+	} else {
+		availableBalanceHouse = currentAvailableBalanceHouse
+	}
 
 	err = s.transactionRepo.UpdateAccountBalance(creditTransaction.AccountAsset1Id, newBalance, availableBalance)
 	if err != nil {
@@ -278,14 +299,35 @@ func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context,
 	}
 
 	/* CALCULATES BALANCE FOR CUSTOMER */
-	newBalance := currentBalance - transactionData.AmountAsset1
-	availableBalance := currentAvailableBalance - transactionData.AmountAsset1
+	var newBalance float64
+	if transactionData.AmountAsset1 != nil {
+		newBalance = currentBalance + *transactionData.AmountAsset1
+	} else {
+		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
+		newBalance = currentBalance
+	}
+	var availableBalance float64
+	if transactionData.AmountAsset1 != nil {
+		availableBalance = currentAvailableBalance + *transactionData.AmountAsset1
+	} else {
+		availableBalance = currentAvailableBalance
+	}
 
-	/* CALCULATES BALANCE FOR HOUSE */
-	newBalanceHouse := currentBalanceHouse - transactionData.AmountAsset1
-	availableBalanceHouse := currentAvailableBalanceHouse - transactionData.AmountAsset1
+	var newBalanceHouse float64
+	if transactionData.AmountAsset1 != nil {
+		newBalanceHouse = currentBalanceHouse + *transactionData.AmountAsset1
+	} else {
+		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
+		newBalanceHouse = currentBalanceHouse
+	}
+	var availableBalanceHouse float64
+	if transactionData.AmountAsset1 != nil {
+		availableBalanceHouse = currentAvailableBalanceHouse + *transactionData.AmountAsset1
+	} else {
+		availableBalanceHouse = currentAvailableBalanceHouse
+	}
 
-	transactionAmount := transactionData.AmountAsset1
+	transactionAmount := *transactionData.AmountAsset1
 
 	if availableBalance < transactionAmount {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("insufficient funds in customer's account")
@@ -399,14 +441,35 @@ func (s *TransactionService) CreateWithdrawal(c *gin.Context, userID string, tra
 	}
 
 	/* CALCULATES BALANCE FOR CUSTOMER */
-	newBalance := currentBalance - transactionData.AmountAsset1
-	availableBalance := currentAvailableBalance - transactionData.AmountAsset1
+	var newBalance float64
+	if transactionData.AmountAsset1 != nil {
+		newBalance = currentBalance + *transactionData.AmountAsset1
+	} else {
+		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
+		newBalance = currentBalance
+	}
+	var availableBalance float64
+	if transactionData.AmountAsset1 != nil {
+		availableBalance = currentAvailableBalance + *transactionData.AmountAsset1
+	} else {
+		availableBalance = currentAvailableBalance
+	}
 
-	/* CALCULATES BALANCE FOR HOUSE */
-	newBalanceHouse := currentBalanceHouse - transactionData.AmountAsset1
-	availableBalanceHouse := currentAvailableBalanceHouse - transactionData.AmountAsset1
+	var newBalanceHouse float64
+	if transactionData.AmountAsset1 != nil {
+		newBalanceHouse = currentBalanceHouse + *transactionData.AmountAsset1
+	} else {
+		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
+		newBalanceHouse = currentBalanceHouse
+	}
+	var availableBalanceHouse float64
+	if transactionData.AmountAsset1 != nil {
+		availableBalanceHouse = currentAvailableBalanceHouse + *transactionData.AmountAsset1
+	} else {
+		availableBalanceHouse = currentAvailableBalanceHouse
+	}
 
-	transactionAmount := transactionData.AmountAsset1
+	transactionAmount := *transactionData.AmountAsset1
 
 	if availableBalance < transactionAmount {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("insufficient funds in customer's account")
