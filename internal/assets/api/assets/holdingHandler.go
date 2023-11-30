@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"thyra/internal/assets/services" // Replace with the actual path to your services
 
@@ -69,4 +70,21 @@ func (h *HoldingsHandler) GetAccountHoldingsWithDetails(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, holdingsWithDetails)
+}
+
+func (h *HoldingsHandler) GetCurrencyID(c *gin.Context) {
+	currencyName := c.Query("currency")
+
+	currencyID, err := h.service.GetCurrencyID(currencyName)
+	if err != nil {
+		log.Printf("Error fetching currency ID: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch currency ID",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"currencyID": currencyID,
+	})
 }

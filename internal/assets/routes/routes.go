@@ -17,7 +17,7 @@ func SetupRoutes(router *gin.RouterGroup, holdingsHandler *handlers.HoldingsHand
 	router.PUT("/orders/:orderId/confirm", handlers.ConfirmOrderHandler)
 	router.PUT("/orders/:orderId/execute", handlers.ExecuteOrderHandler)
 	router.PUT("/orders/:orderId/settle", handlers.SettlementHandler)
-
+	router.GET("/currency", holdingsHandler.GetCurrencyID)
 	router.GET("/account/:accountId/holdings", holdingsHandler.GetAccountHoldingsWithDetails)
 
 }

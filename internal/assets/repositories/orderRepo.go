@@ -3,6 +3,7 @@ package repositories
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"thyra/internal/assets/models"
 	"time"
 
@@ -108,6 +109,17 @@ func GetOrder(db *sqlx.DB, orderID string) (*models.Order, error) {
 	return &order, nil
 }
 
+func GetOrderType(db *sqlx.DB, trtShortName string) (uuid.UUID, error) {
+
+	var trtUUID uuid.UUID
+	query := "SELECT type_id FROM transactions_types WHERE trt_short_name = $1"
+	if err := db.Get(&trtUUID, query, trtShortName); err != nil {
+		return uuid.Nil, err
+	}
+
+	return trtUUID, nil
+}
+
 func UpdateOrderStatus(tx *sqlx.Tx, orderID string, status models.OrderStatusType) error {
 	query := "UPDATE thyrasec.orders SET status = $1 WHERE id = $2"
 	_, err := tx.Exec(query, status, orderID)
@@ -141,18 +153,33 @@ func CheckAvailableCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal
 }
 
 func ReleaseReservation(db *sqlx.DB, orderID string) error {
+	var accountID uuid.UUID
+	var amount decimal.Decimal
 
-	query := `UPDATE thyrasec.cash_reservations
-	SET status = 'inactive'
-	WHERE order_id = $1`
+	// Prepare the query
+	quantityQuery := `SELECT account_id, amount FROM thyrasec.cash_reservations WHERE order_id = $1`
 
-	_, err := db.Exec(query, orderID)
+	// Execute the query and scan the results into the variables
+	err := db.QueryRow(quantityQuery, orderID).Scan(&accountID, &amount)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get reservation details: %w", err)
+	}
+
+	// Update account reserved cash
+	updateAccountQuery := `UPDATE thyrasec.accounts SET reserved_cash = reserved_cash - $1 WHERE id = $2`
+	_, err = db.Exec(updateAccountQuery, amount, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to update account reserved cash: %w", err)
+	}
+
+	// Update reservation status
+	updateReservationQuery := `UPDATE thyrasec.cash_reservations SET status = 'inactive' WHERE order_id = $1`
+	_, err = db.Exec(updateReservationQuery, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to update reservation status: %w", err)
 	}
 
 	return nil
-
 }
 
 func UpdateAccountBalance(db *sqlx.DB, accountID uuid.UUID, balanceChange float64) error {
@@ -162,10 +189,12 @@ func UpdateAccountBalance(db *sqlx.DB, accountID uuid.UUID, balanceChange float6
 		return err
 	}
 
+	fmt.Sprintf("Updating inside function: %v, %w", accountID, balanceChange)
 	// Define the query to update the account
 	query := `UPDATE thyrasec.accounts
 	SET account_balance = account_balance - $1,
-		reserved_cash = reserved_cash - $1
+		reserved_cash = reserved_cash - $1,
+		available_cash = available_cash - $1
 	WHERE id = $2`
 
 	// Execute the query
@@ -193,4 +222,15 @@ func InsertHolding(db *sqlx.DB, holding models.Holding) error {
 	}
 
 	return nil
+}
+
+func UpdateOrder(db *sqlx.DB, orderID string, settledQuantity float64, settledAmount float64, status string, tradeDate *time.Time, settlementDate *time.Time, comment string) error {
+	query := `
+        UPDATE thyrasec.orders
+        SET settledQuantity = $1, settledAmount = $2, status = $3, trade_date = $4, settlement_date = $5, comment = $6, updated_at = NOW()
+        WHERE id = $7	
+        `
+
+	_, err := db.Exec(query, settledQuantity, settledAmount, status, tradeDate, settlementDate, comment, orderID)
+	return err
 }

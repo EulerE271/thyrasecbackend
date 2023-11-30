@@ -38,14 +38,11 @@ func GetTransactionByUserHandler(c *gin.Context) {
     SELECT
         t.*,
         tt.transaction_type_name,
-        ts.status_label,
         a.account_number
     FROM 
         thyrasec.transactions t
     LEFT JOIN 
         thyrasec.transactions_types tt ON t.type = tt.type_id
-    LEFT JOIN 
-        thyrasec.transaction_status ts ON t.status_transaction = ts.status_id
     LEFT JOIN
         thyrasec.accounts a ON t.account_owner_id = a.id
     WHERE 

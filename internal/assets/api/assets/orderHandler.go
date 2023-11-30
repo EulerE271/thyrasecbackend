@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"thyra/internal/assets/models"
 	"thyra/internal/assets/repositories"
@@ -110,6 +111,7 @@ func CreateBuyOrderHandler(c *gin.Context) {
 
 	// Insert cash reservation for the order
 	reservedUntil := time.Now().Add(24 * time.Hour)
+	fmt.Printf("inserting into cash reservations:")
 	if err := repositories.InsertCashReservation(tx, newOrder, reservedUntil); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create cash reservation", "details": err.Error()})
@@ -214,6 +216,14 @@ func ExecuteOrderHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Order executed successfully"})
 }
 
+type SettlementRequest struct {
+	SettledQuantity float64    `json:"quantity"`
+	SettledAmount   float64    `json:"amount"`
+	Comment         string     `json:"comment"`
+	TradeDate       *time.Time `json:"tradeDate"`
+	SettlementDate  *time.Time `json:"settlementDate"`
+}
+
 func SettlementHandler(c *gin.Context) {
 	orderID := c.Param("orderId")
 
@@ -241,6 +251,27 @@ func SettlementHandler(c *gin.Context) {
 		return
 	}
 
+	var settlementRequest SettlementRequest
+	if err := c.BindJSON(&settlementRequest); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+		return
+	}
+
+	orderType := ""
+
+	if order.OrderType == "buy" {
+		orderType = "trt_shares_acquisition"
+	} else {
+		orderType = "trt_shares_sell"
+	}
+
+	fmt.Println(orderType)
+	transactionType, err := repositories.GetOrderType(sqlxDB, orderType)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong fetching orderType"})
+		return
+	}
+
 	transactionRepo := transactionRepository.NewTransactionRepository(sqlxDB)
 	transactionService := transactionServices.NewTransactionService(transactionRepo)
 
@@ -252,14 +283,13 @@ func SettlementHandler(c *gin.Context) {
 	// Define the cash and instrument transactions
 	cashTransaction := &transactionModel.Transaction{
 		Id:                 uuid.New(),
-		Type:               uuid.New(), // Replace with actual transaction type
+		Type:               transactionType, // Replace with actual transaction type
 		CreatedById:        userUUID,
 		UpdatedById:        userUUID,
 		Asset1Id:           uuid.New(), // Replace with actual cash asset ID
 		AmountAsset1:       &amountAsset1,
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
-		StatusTransaction:  uuid.New(), // Replace with actual status
 		TransactionOwnerId: order.OwnerID,
 		AccountOwnerId:     order.AccountID,
 		Trade_date:         order.TradeDate,
@@ -269,14 +299,13 @@ func SettlementHandler(c *gin.Context) {
 
 	instrumentTransaction := &transactionModel.Transaction{
 		Id:                 uuid.New(),
-		Type:               uuid.New(), // Replace with actual transaction type
+		Type:               transactionType, // Replace with actual transaction type
 		CreatedById:        userUUID,
 		UpdatedById:        userUUID,
 		Asset1Id:           order.AssetID,
 		AmountAsset1:       &orderQuantity,
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
-		StatusTransaction:  uuid.New(), // Replace with actual status
 		TransactionOwnerId: order.OwnerID,
 		AccountOwnerId:     order.AccountID,
 		Trade_date:         order.TradeDate,
@@ -284,9 +313,16 @@ func SettlementHandler(c *gin.Context) {
 		Comment:            &comment,
 	}
 
-	_, _, err = transactionService.CreateInstrumentPurchaseTransaction(c, userUUID.String(), cashTransaction, instrumentTransaction)
+	_, _, err = transactionService.CreateInstrumentPurchaseTransaction(c, order.AccountID, userUUID.String(), cashTransaction, instrumentTransaction)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create transaction", "details": err.Error()})
+		return
+	}
+
+	fmt.Println(settlementRequest.SettledQuantity)
+	err = repositories.UpdateOrder(sqlxDB, orderID, settlementRequest.SettledQuantity, settlementRequest.SettledAmount, "settled", settlementRequest.TradeDate, settlementRequest.SettlementDate, settlementRequest.Comment)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order", "details": err.Error()})
 		return
 	}
 
@@ -298,11 +334,13 @@ func SettlementHandler(c *gin.Context) {
 	}
 
 	// Update account balance
+	/*fmt.Println("order total amount: %v", order.TotalAmount)
+	fmt.Println("order accountID: %v", order.AccountID)
 	err = repositories.UpdateAccountBalance(sqlxDB, order.AccountID, order.TotalAmount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
 		return
-	}
+	} */
 
 	// Insert into holding
 	holding := models.Holding{

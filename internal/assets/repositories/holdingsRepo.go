@@ -10,6 +10,7 @@ import (
 type HoldingsRepository interface {
 	GetHoldingsByAccountId(accountId uuid.UUID) ([]models.Holding, error)
 	GetAssetInformation(assetId uuid.UUID) (*models.Asset, error)
+	GetCurrencyID(currencyName string) (string, error)
 }
 type holdingsRepository struct {
 	db *sqlx.DB
@@ -38,4 +39,19 @@ func (r *holdingsRepository) GetAssetInformation(assetId uuid.UUID) (*models.Ass
 		return nil, err
 	}
 	return &asset, nil
+}
+
+func (r *holdingsRepository) GetCurrencyID(currencyName string) (string, error) {
+
+	var currencyID string
+
+	query := `SELECT id FROM thyrasec.currencies WHERE name = $1`
+
+	err := r.db.QueryRow(query, currencyName).Scan(&currencyID)
+	if err != nil {
+		return "", err
+	}
+
+	return currencyID, nil
+
 }

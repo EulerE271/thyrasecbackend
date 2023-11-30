@@ -1,6 +1,8 @@
 package services
 
 import (
+	"errors"
+	"fmt"
 	"thyra/internal/assets/models"       // Replace with the actual path to your models
 	"thyra/internal/assets/repositories" // Replace with the actual path to your repositories
 
@@ -11,6 +13,7 @@ type HoldingsService interface {
 	GetAccountHoldings(accountId uuid.UUID) ([]models.Holding, error)
 	GetAssetDetails(assetId uuid.UUID) (*models.Asset, error)
 	GetHoldingsWithAssetDetails(accountId uuid.UUID) ([]HoldingWithAssetDetails, error)
+	GetCurrencyID(currencyName string) (string, error)
 }
 
 type HoldingWithAssetDetails struct {
@@ -57,4 +60,17 @@ func (s *holdingsService) GetHoldingsWithAssetDetails(accountId uuid.UUID) ([]Ho
 	}
 
 	return holdingsWithDetails, nil
+}
+
+func (s *holdingsService) GetCurrencyID(currencyName string) (string, error) {
+	if currencyName == "" {
+		return "", errors.New("currency cannot be empty")
+	}
+
+	currencyID, err := s.repo.GetCurrencyID(currencyName)
+	if err != nil {
+		return "", fmt.Errorf("error fetching currency ID for %s: %w", currencyName, err)
+	}
+
+	return currencyID, nil
 }

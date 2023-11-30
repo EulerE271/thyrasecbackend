@@ -35,23 +35,26 @@ type SnapshotValue struct {
 	Value float64
 }
 
-//Calculates the performance of a single account
 func (r *AccountPerformanceRepository) GetAccountPerformanceChange(ctx context.Context, accountID uuid.UUID, startDate, endDate time.Time) (ValueChange, error) {
 	snapshots, err := r.fetchAccountSnapshots(ctx, accountID, startDate, endDate)
 	if err != nil {
 		return ValueChange{}, err
 	}
-
-	// Check if there are any snapshots
-	if len(snapshots) == 0 {
-		return ValueChange{}, fmt.Errorf("no data available for account %s", accountID)
+	transactions, err := r.fetchTransactions(ctx, accountID, startDate, endDate)
+	if err != nil {
+		return ValueChange{}, err
 	}
 
+	totalCashFlow := calculateCashFlows(transactions)
 	// Use the first and last snapshots for start and end values
 	startValue := snapshots[0].Value
 	endValue := snapshots[len(snapshots)-1].Value
 
-	valueChange := endValue - startValue
+	// Adjust end value for cash flows
+	adjustedEndValue := endValue - totalCashFlow
+
+	// Calculate value change using adjusted end value
+	valueChange := adjustedEndValue - startValue
 	percentualChange := 0.0
 	if startValue != 0 {
 		percentualChange = (valueChange / startValue) * 100
@@ -59,7 +62,7 @@ func (r *AccountPerformanceRepository) GetAccountPerformanceChange(ctx context.C
 
 	return ValueChange{
 		StartValue:       startValue,
-		EndValue:         endValue,
+		EndValue:         adjustedEndValue, // Use adjusted end value here
 		Change:           valueChange,
 		PercentualChange: percentualChange,
 		StartDate:        snapshots[0].Date,
@@ -241,4 +244,72 @@ func (r *AccountPerformanceRepository) fetchUserAccountIDs(ctx context.Context, 
 	}
 
 	return accountIDs, nil
+}
+
+type Transaction struct {
+	Id                 uuid.UUID `json:"id" db:"id"`
+	TransactionOwnerId uuid.UUID `json:"transaction_owner_id" db:"transaction_owner_id"`
+	AccountOwnerId     uuid.UUID `json:"account_owner_id" db:"account_owner_id"`
+	Type               uuid.UUID `json:"type" db:"type"`
+	Asset1Id           uuid.UUID `json:"asset1_id" db:"asset1_id"`                 // Nullable field
+	Asset2Id           uuid.UUID `json:"asset2_id" db:"asset2_id"`                 // Nullable field
+	AccountAsset1Id    uuid.UUID `json:"account_asset1_id" db:"account_asset1_id"` // Nullable field
+	AccountAsset2Id    uuid.UUID `json:"account_asset2_id" db:"account_asset2_id"` // Nullable field
+	AmountAsset1       *float64  `json:"amount_asset1" db:"amount_asset1"`         // Nullable field
+	AmountAsset2       *float64  `json:"amount_asset2" db:"amount_asset2"`         // Nullable field
+	CreatedById        uuid.UUID `json:"created_by_id" db:"created_by_id"`
+	UpdatedById        uuid.UUID `json:"updated_by_id" db:"updated_by_id"`
+	CreatedAt          time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
+	Corrected          bool      `json:"corrected" db:"corrected"`
+	Canceled           bool      `json:"canceled" db:"canceled"`
+	Comment            *string   `json:"comment" db:"comment"` // Nullable field
+	Asset2_currency    uuid.UUID `json:"asset2_currency" db:"asset2_currency"`
+	Asset2_price       uuid.UUID `json:"asset2_price" db:"asset2_price"`
+	OrderNumber        string    `json:"order_no" db:"order_no"`
+	BusinessEvent      uuid.UUID `json:"business_event" db:"business_event"`
+	Trade_date         time.Time `json:"trade_date" db:"trade_date"`
+	Settlement_date    time.Time `json:"settlement_date" db:"settlement_date"`
+}
+
+func (r *AccountPerformanceRepository) fetchTransactions(ctx context.Context, accountID uuid.UUID, startDate, endDate time.Time) ([]Transaction, error) {
+	var transactions []Transaction
+
+	// Query to fetch transactions
+	query := `
+    SELECT id, type, amount_asset1, amount_asset2, trade_date
+    FROM thyrasec.transactions
+    WHERE account_owner_id = $1 AND trade_date BETWEEN $2 AND $3
+    `
+
+	rows, err := r.db.QueryContext(ctx, query, accountID, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var transaction Transaction
+		if err := rows.Scan(&transaction.Id, &transaction.Type, &transaction.AmountAsset1, &transaction.AmountAsset2, &transaction.Trade_date); err != nil {
+			return nil, err
+		}
+		transactions = append(transactions, transaction)
+	}
+	return transactions, nil
+}
+
+func calculateCashFlows(transactions []Transaction) float64 {
+	var totalCashFlow float64
+	for _, transaction := range transactions {
+		// Check for deposit
+		if transaction.AmountAsset1 != nil && *transaction.AmountAsset1 > 0 {
+			totalCashFlow += *transaction.AmountAsset1 // Adding deposit to cash flow
+		}
+
+		// Check for withdrawal
+		if transaction.AmountAsset2 != nil && *transaction.AmountAsset2 > 0 {
+			totalCashFlow -= *transaction.AmountAsset2 // Subtracting withdrawal from cash flow
+		}
+	}
+	return totalCashFlow
 }

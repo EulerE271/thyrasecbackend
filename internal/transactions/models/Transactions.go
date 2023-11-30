@@ -23,7 +23,6 @@ type Transaction struct {
 	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
 	Corrected          bool      `json:"corrected" db:"corrected"`
 	Canceled           bool      `json:"canceled" db:"canceled"`
-	StatusTransaction  uuid.UUID `json:"status_transaction" db:"status_transaction"`
 	Comment            *string   `json:"comment" db:"comment"` // Nullable field
 	Asset2_currency    uuid.UUID `json:"asset2_currency" db:"asset2_currency"`
 	Asset2_price       uuid.UUID `json:"asset2_price" db:"asset2_price"`
@@ -36,16 +35,15 @@ type Transaction struct {
 func InitializeTransaction(createdBy, transactionType uuid.UUID, comment *string) Transaction {
 	now := time.Now()
 	return Transaction{
-		Id:                uuid.New(), // Generate a new UUID for the transaction
-		CreatedById:       createdBy,
-		UpdatedById:       createdBy, // Assuming the creator is also the one performing the update
-		CreatedAt:         now,
-		UpdatedAt:         now,
-		Corrected:         false,    // Default to false, assuming the transaction isn't corrected at the time of creation
-		Canceled:          false,    // Default to false, assuming the transaction isn't canceled at the time of creation
-		StatusTransaction: uuid.Nil, // Should be set to an appropriate value after initialization if needed
-		Type:              transactionType,
-		Comment:           comment,
+		Id:          uuid.New(), // Generate a new UUID for the transaction
+		CreatedById: createdBy,
+		UpdatedById: createdBy, // Assuming the creator is also the one performing the update
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		Corrected:   false, // Default to false, assuming the transaction isn't corrected at the time of creation
+		Canceled:    false, // Default to false, assuming the transaction isn't canceled at the time of creation
+		Type:        transactionType,
+		Comment:     comment,
 		// The following fields are nullable and should be set explicitly when needed:
 		// Asset1Id:
 		// Asset2Id:
@@ -78,7 +76,6 @@ func (t *Transaction) ToMap() map[string]interface{} {
 		"updated_at":           t.UpdatedAt,
 		"corrected":            t.Corrected,
 		"canceled":             t.Canceled,
-		"status_transaction":   t.StatusTransaction,
 		"comment":              t.Comment,
 	}
 }
@@ -100,9 +97,10 @@ type TransactionDisplay struct {
 
 //Model for returning transaction types as defined in transaction_types table
 type TransactionType struct {
-	Id                    int    `json:"id"`
-	TypeID                string `json:"type_id" db:"type_id"`
-	Transaction_type_name string `json:"transaction_type_name"`
+	Id                       int    `json:"id"`
+	TypeID                   string `json:"type_id" db:"type_id"`
+	Transaction_type_name    string `json:"transaction_type_name"`
+	TransactionTypeShortName string `db:"trt_short_name" json:"trt_short_name"`
 }
 
 //Defines the request sent to acounts service for updating balance when creating a transaction.

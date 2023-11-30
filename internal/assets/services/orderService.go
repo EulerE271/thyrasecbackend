@@ -88,16 +88,16 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 	// Perform actions specific to confirming the order
 	if order.OrderType == "buy" {
 		totalAmountDecimal := decimal.NewFromFloat(order.TotalAmount)
-		sufficientFunds, err := repositories.CheckAvailableCash(tx, order.AccountID, totalAmountDecimal)
+		_, err := repositories.CheckAvailableCash(tx, order.AccountID, totalAmountDecimal)
 		if err != nil {
 			tx.Rollback()
 			return err
 		}
 
-		if !sufficientFunds {
+		/*if !sufficientFunds {
 			tx.Rollback()
 			return errors.New("insufficient funds to execute buy order")
-		}
+		} */
 	} else if order.OrderType == "sell" {
 		// Logic to reserve assets for a sell order
 		availableQuantity, err := repositories.CheckHoldings(tx, order.AccountID, order.AssetID)
@@ -148,16 +148,16 @@ func ExecuteOrder(db *sqlx.DB, orderID string) error {
 
 	if order.OrderType == "buy" {
 		totalAmountDecimal := decimal.NewFromFloat(order.TotalAmount)
-		sufficientFunds, err := repositories.CheckAvailableCash(tx, order.AccountID, totalAmountDecimal)
+		_, err := repositories.CheckAvailableCash(tx, order.AccountID, totalAmountDecimal)
 		if err != nil {
 			tx.Rollback()
 			return err
 		}
 
-		if !sufficientFunds {
+		/*if !sufficientFunds {
 			tx.Rollback()
 			return errors.New("insufficient funds to execute buy order")
-		}
+		} */
 	} else if order.OrderType == "sell" {
 		// Logic to reserve assets for a sell order
 		availableQuantity, err := repositories.CheckHoldings(tx, order.AccountID, order.AssetID)
