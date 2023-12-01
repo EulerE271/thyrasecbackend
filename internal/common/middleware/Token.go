@@ -20,7 +20,6 @@ type Claims struct {
 func TokenMiddleware(c *gin.Context) {
 	// Extract the token from the cookie
 	tokenString, err := c.Cookie("token")
-	fmt.Printf("Token: %v", tokenString)
 	if err != nil {
 		// More specific error message
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Cookie 'token' not found", "details": err.Error()})
@@ -38,8 +37,6 @@ func TokenMiddleware(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	fmt.Println("Token validated successfully") // Debug line
-	fmt.Println()
 
 	// Token is valid, extract claims
 	claims, ok := token.Claims.(*Claims)

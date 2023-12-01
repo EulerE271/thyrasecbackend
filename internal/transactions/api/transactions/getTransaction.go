@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"net/http"
 	"thyra/internal/common/db"
 	"thyra/internal/transactions/models"
@@ -44,9 +45,9 @@ func GetTransactionByUserHandler(c *gin.Context) {
     LEFT JOIN 
         thyrasec.transactions_types tt ON t.type = tt.type_id
     LEFT JOIN
-        thyrasec.accounts a ON t.account_owner_id = a.id
+        thyrasec.accounts a ON t.transaction_owner_account_id = a.id
     WHERE 
-        t.account_owner_id = $1;
+        t.transaction_owner_account_id = $1;
     `
 	var transactions []models.TransactionDisplay
 	if err := db.Select(&transactions, query, targetUserID); err != nil {
@@ -103,4 +104,34 @@ func GetAllTransactionsHandler(c *gin.Context) {
 
 	// Sending the response
 	c.JSON(http.StatusOK, transactions)
+}
+
+func GetAssetID(c *gin.Context) {
+	db := db.GetConnection(c)
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection issue"})
+		return
+	}
+
+	identifier := c.Query("identifier")
+
+	query := `
+        SELECT c.id, c.unified_asset_id, ua.asset_type_id
+        FROM thyrasec.currencies c
+        JOIN thyrasec.unified_assets ua ON c.unified_asset_id = ua.id
+        WHERE ua.identifier = $1;
+    `
+
+	var assetID, unifiedAssetId, assetTypeId string
+	err := db.QueryRow(query, identifier).Scan(&assetID, &unifiedAssetId, &assetTypeId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Asset not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database query failed", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"asset_id": assetID, "unified_asset_id": unifiedAssetId, "asset_type_id": assetTypeId})
 }

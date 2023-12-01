@@ -26,22 +26,25 @@ func NewTransactionRepository(db *sqlx.DB) TransactionRepository {
 func (r *transactionRepository) InsertTransaction(transaction *models.Transaction) error {
 	query := `
         INSERT INTO thyrasec.transactions (
-            id, type, asset1_id, asset2_id, amount_asset1, amount_asset2, created_by_id,
-            updated_by_id, created_at, updated_at, corrected, canceled,
-            comment, transaction_owner_id, account_owner_id, account_asset1_id,
-            account_asset2_id, trade_date, settlement_date, order_no
+            id, type, asset_id, cash_amount, asset_quantity, cash_account_id, 
+            asset_account_id, asset_type, transaction_currency, asset_price, 
+            created_by_id, updated_by_id, created_at, updated_at, corrected, canceled,
+            comment, transaction_owner_id, transaction_owner_account_id, trade_date, 
+            settlement_date, order_no, business_event
         )
         VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 
+            $17, $18, $19, $20, $21, $22, $23
         )`
 	_, err := r.db.Exec(query,
-		transaction.Id, transaction.Type, transaction.Asset1Id, transaction.Asset2Id,
-		transaction.AmountAsset1, transaction.AmountAsset2, transaction.CreatedById,
-		transaction.UpdatedById, transaction.CreatedAt, transaction.UpdatedAt,
-		transaction.Corrected, transaction.Canceled,
-		transaction.Comment, transaction.TransactionOwnerId, transaction.AccountOwnerId,
-		transaction.AccountAsset1Id, transaction.AccountAsset2Id,
-		transaction.Trade_date, transaction.Settlement_date, transaction.OrderNumber)
+		transaction.Id, transaction.Type, transaction.AssetId, transaction.CashAmount,
+		transaction.AssetQuantity, transaction.CashAccountId, transaction.AssetAccountId,
+		transaction.AssetType, transaction.TransactionCurrency, transaction.AssetPrice,
+		transaction.CreatedById, transaction.UpdatedById, transaction.CreatedAt,
+		transaction.UpdatedAt, transaction.Corrected, transaction.Canceled,
+		transaction.Comment, transaction.TransactionOwnerId, transaction.TransactionOwnerAccountId,
+		transaction.TradeDate, transaction.SettlementDate, transaction.OrderNumber,
+		transaction.BusinessEvent)
 	return err
 }
 

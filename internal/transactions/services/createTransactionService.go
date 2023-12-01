@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"thyra/internal/transactions/models"
 	"thyra/internal/transactions/repositories"
 	orderno "thyra/internal/transactions/services/ordernumber"
@@ -75,13 +76,17 @@ func NewTransactionService(transactionRepo repositories.TransactionRepository) *
 }
 
 func (s *TransactionService) CreateDeposit(c *gin.Context, userID string, transactionData *models.Transaction) (uuid.UUID, uuid.UUID, error) {
+	//Gets UUID for the current authenticated user
 	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, errors.New("invalid user ID")
 	}
 
+	//Generates ordernumber
 	OrderNumber := orderno.GenerateOrderNumber()
-	houseAccountID, err := utils.GetHouseAccount(c) // Assuming GetHouseAccount does not require context
+
+	//Fetches house account
+	houseAccountID, err := utils.GetHouseAccount(c)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
@@ -91,110 +96,88 @@ func (s *TransactionService) CreateDeposit(c *gin.Context, userID string, transa
 		return uuid.Nil, uuid.Nil, err
 	}
 
-	debitTransactionID := uuid.New()
-	creditTransactionID := uuid.New()
+	clientTransactionID := uuid.New()
+	houseTransactionID := uuid.New()
 
-	// Setup debit and credit transactions
-	creditTransaction := *transactionData
-	creditTransaction.Id = creditTransactionID
-	creditTransaction.CreatedAt = time.Now()
-	creditTransaction.UpdatedAt = time.Now()
-	creditTransaction.CreatedById = userUUID
-	creditTransaction.UpdatedById = userUUID
-	creditTransaction.OrderNumber = OrderNumber
+	clientTransaction := *transactionData
+	clientTransaction.Id = clientTransactionID
+	clientTransaction.CreatedById = userUUID
+	clientTransaction.UpdatedById = userUUID
+	clientTransaction.CreatedAt = time.Now()
+	clientTransaction.UpdatedAt = time.Now()
+	clientTransaction.Corrected = false
+	clientTransaction.Corrected = false
+	clientTransaction.OrderNumber = OrderNumber
 
-	debitTransaction := models.Transaction{
-		Id:                 debitTransactionID,
-		Type:               creditTransaction.Type,
-		CreatedById:        userUUID,
-		UpdatedById:        userUUID,
-		Asset1Id:           creditTransaction.Asset1Id,
-		AmountAsset1:       creditTransaction.AmountAsset1,
-		CreatedAt:          time.Now(),
-		UpdatedAt:          time.Now(),
-		Comment:            creditTransaction.Comment,
-		TransactionOwnerId: creditTransaction.TransactionOwnerId,
-		AccountOwnerId:     houseAccountUUID,
-		AccountAsset1Id:    creditTransaction.AccountAsset2Id,
-		AccountAsset2Id:    uuid.Nil,
-		OrderNumber:        OrderNumber,
-		Trade_date:         creditTransaction.Trade_date,
-		Settlement_date:    creditTransaction.Settlement_date,
-	}
-
-	creditTransaction.AmountAsset1 = nil
-	creditTransaction.AccountAsset1Id = uuid.Nil
-	creditTransaction.Asset1Id = uuid.Nil
+	houseTransaction := clientTransaction
+	houseTransaction.Id = houseTransactionID
+	houseTransaction.TransactionOwnerAccountId = houseAccountUUID
 
 	/* CHECKS THE BALANCE OF THE CUSTOMER ACCOUNT */
-	currentBalance, err := s.transactionRepo.GetAccountBalance(transactionData.AccountAsset1Id)
+	currentBalance, err := s.transactionRepo.GetAccountBalance(clientTransaction.TransactionOwnerAccountId)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
-	}
-	currentAvailableBalance, err := s.transactionRepo.GetAccountAvailableBalance(transactionData.AccountAsset1Id)
-	if err != nil {
+		fmt.Printf("error in currentBalance: %v")
 		return uuid.Nil, uuid.Nil, err
 	}
 
-	/*BALANCE CHEKC FOR HOUSE */
-	currentBalanceHouse, err := s.transactionRepo.GetAccountBalance(debitTransaction.AccountAsset1Id)
+	currentAvailableBalance, err := s.transactionRepo.GetAccountAvailableBalance(clientTransaction.TransactionOwnerAccountId)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
-	}
-	currentAvailableBalanceHouse, err := s.transactionRepo.GetAccountAvailableBalance(debitTransaction.AccountAsset1Id)
-	if err != nil {
+		fmt.Printf("error in currentAvailableBalance: %v")
 		return uuid.Nil, uuid.Nil, err
 	}
 
-	/* CALCULATES BALANCE FOR CUSTOMER */
-	var newBalance float64
-	if transactionData.AmountAsset1 != nil {
-		newBalance = currentBalance + *transactionData.AmountAsset1
+	/* BALANCE CHECK FOR HOUSE */
+
+	currentBalanceHouse, err := s.transactionRepo.GetAccountBalance(houseAccountUUID)
+	if err != nil {
+		fmt.Printf("error in currentBalanceHouse: %v")
+		return uuid.Nil, uuid.Nil, err
+	}
+
+	currentAvailableBalanceHouse, err := s.transactionRepo.GetAccountAvailableBalance(houseAccountUUID)
+	if err != nil {
+		fmt.Printf("error in currentAvailableBalanceHouse: %v")
+		return uuid.Nil, uuid.Nil, err
+	}
+
+	/* CALCULATES BALANCE FOR CUSTOMER AND HOUSE */
+	var newBalance, availableBalance, newBalanceHouse, availableBalanceHouse float64
+	if clientTransaction.CashAmount != nil {
+		newBalance = currentBalance + *clientTransaction.CashAmount
+		availableBalance = currentAvailableBalance + *clientTransaction.CashAmount
+		newBalanceHouse = currentBalanceHouse - *clientTransaction.CashAmount // Assuming house loses this amount
+		availableBalanceHouse = currentAvailableBalanceHouse - *clientTransaction.CashAmount
 	} else {
-		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
 		newBalance = currentBalance
-	}
-	var availableBalance float64
-	if transactionData.AmountAsset1 != nil {
-		availableBalance = currentAvailableBalance + *transactionData.AmountAsset1
-	} else {
 		availableBalance = currentAvailableBalance
-	}
-
-	var newBalanceHouse float64
-	if transactionData.AmountAsset1 != nil {
-		newBalanceHouse = currentBalanceHouse + *transactionData.AmountAsset1
-	} else {
-		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
 		newBalanceHouse = currentBalanceHouse
-	}
-	var availableBalanceHouse float64
-	if transactionData.AmountAsset1 != nil {
-		availableBalanceHouse = currentAvailableBalanceHouse + *transactionData.AmountAsset1
-	} else {
 		availableBalanceHouse = currentAvailableBalanceHouse
 	}
 
-	err = s.transactionRepo.UpdateAccountBalance(creditTransaction.AccountAsset1Id, newBalance, availableBalance)
+	err = s.transactionRepo.UpdateAccountBalance(clientTransaction.CashAccountId, newBalance, availableBalance)
 	if err != nil {
+		fmt.Printf("error in UpdateAccountBalance: %v", err)
 		return uuid.Nil, uuid.Nil, err
 	}
-	err = s.transactionRepo.UpdateAccountBalance(debitTransaction.AccountAsset1Id, newBalanceHouse, availableBalanceHouse)
+	err = s.transactionRepo.UpdateAccountBalance(houseAccountUUID, newBalanceHouse, availableBalanceHouse)
 	if err != nil {
+		fmt.Printf("error in UpdateAccountBalance: %v", err)
 		return uuid.Nil, uuid.Nil, err
 	}
 
 	// Insert into database using repository
-	err = s.transactionRepo.InsertTransaction(&debitTransaction)
+	err = s.transactionRepo.InsertTransaction(&clientTransaction)
 	if err != nil {
+		fmt.Printf("error in ClientTransaction: %v", err)
 		return uuid.Nil, uuid.Nil, err
 	}
-	err = s.transactionRepo.InsertTransaction(&creditTransaction)
+	err = s.transactionRepo.InsertTransaction(&houseTransaction)
 	if err != nil {
+		fmt.Printf("error in InsertCreditTransaction: %v", err)
 		return uuid.Nil, uuid.Nil, err
 	}
 
-	return debitTransactionID, creditTransactionID, nil
+	return clientTransactionID, houseAccountUUID, nil
 }
 
 func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context, accountID uuid.UUID, userID string, transactionData *models.Transaction, transactionInstrumentData *models.Transaction) (uuid.UUID, uuid.UUID, error) {
@@ -220,7 +203,7 @@ func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context,
 	debitInstrumentTransactionID := uuid.New()
 	creditInstrumentTransactionID := uuid.New()
 
-	// Debit transaction - already bound from the request
+	// Debit transaction for cash
 	debitTransaction := transactionData
 	debitTransaction.Id = debitTransactionID
 	debitTransaction.CreatedAt = time.Now()
@@ -229,26 +212,22 @@ func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context,
 	debitTransaction.UpdatedById = userUUID
 	debitTransaction.OrderNumber = OrderNumber
 
+	// Credit transaction for cash
 	creditTransaction := &models.Transaction{
-		Id:                 creditTransactionID,
-		Type:               debitTransaction.Type,
-		CreatedById:        userUUID,
-		UpdatedById:        userUUID,
-		Asset2Id:           debitTransaction.Asset1Id,
-		AmountAsset2:       debitTransaction.AmountAsset1,
-		CreatedAt:          time.Now(),
-		UpdatedAt:          time.Now(),
-		Comment:            debitTransaction.Comment,
-		TransactionOwnerId: debitTransaction.TransactionOwnerId,
-		AccountOwnerId:     houseAccountUUID,
-		AccountAsset2Id:    accountID,
-		AccountAsset1Id:    uuid.Nil,
-		OrderNumber:        OrderNumber,
-		Trade_date:         debitTransaction.Trade_date,
-		Settlement_date:    debitTransaction.Settlement_date,
+		Id:                        creditTransactionID,
+		Type:                      debitTransaction.Type,
+		CashAmount:                debitTransaction.CashAmount,
+		CreatedById:               userUUID,
+		UpdatedById:               userUUID,
+		CashAccountId:             houseAccountUUID,
+		TransactionOwnerId:        debitTransaction.TransactionOwnerId,
+		TransactionOwnerAccountId: accountID,
+		OrderNumber:               OrderNumber,
+		TradeDate:                 debitTransaction.TradeDate,
+		SettlementDate:            debitTransaction.SettlementDate,
 	}
 
-	/*Configures the instrument transaction */
+	// Debit transaction for instrument
 	debitInstrumentTransaction := transactionInstrumentData
 	debitInstrumentTransaction.Id = debitInstrumentTransactionID
 	debitInstrumentTransaction.CreatedAt = time.Now()
@@ -257,23 +236,19 @@ func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context,
 	debitInstrumentTransaction.UpdatedById = userUUID
 	debitInstrumentTransaction.OrderNumber = OrderNumber
 
+	// Credit transaction for instrument
 	creditInstrumentTransaction := &models.Transaction{
-		Id:                 creditInstrumentTransactionID,
-		Type:               debitInstrumentTransaction.Type,
-		CreatedById:        userUUID,
-		UpdatedById:        userUUID,
-		Asset2Id:           debitInstrumentTransaction.Asset1Id,
-		AmountAsset2:       debitInstrumentTransaction.AmountAsset1,
-		CreatedAt:          time.Now(),
-		UpdatedAt:          time.Now(),
-		Comment:            debitInstrumentTransaction.Comment,
-		TransactionOwnerId: debitInstrumentTransaction.TransactionOwnerId,
-		AccountOwnerId:     houseAccountUUID,
-		AccountAsset2Id:    accountID,
-		AccountAsset1Id:    uuid.Nil,
-		OrderNumber:        OrderNumber,
-		Trade_date:         debitInstrumentTransaction.Trade_date,
-		Settlement_date:    debitInstrumentTransaction.Settlement_date,
+		Id:                        creditInstrumentTransactionID,
+		Type:                      debitInstrumentTransaction.Type,
+		AssetQuantity:             debitInstrumentTransaction.AssetQuantity,
+		CreatedById:               userUUID,
+		UpdatedById:               userUUID,
+		AssetAccountId:            houseAccountUUID,
+		TransactionOwnerId:        debitInstrumentTransaction.TransactionOwnerId,
+		TransactionOwnerAccountId: accountID,
+		OrderNumber:               OrderNumber,
+		TradeDate:                 debitInstrumentTransaction.TradeDate,
+		SettlementDate:            debitInstrumentTransaction.SettlementDate,
 	}
 
 	/* CHECKS THE BALANCE OF THE CUSTOMER ACCOUNT */
@@ -303,29 +278,30 @@ func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context,
 
 	/* CALCULATES BALANCE FOR CUSTOMER */
 	var newBalance float64
-	if transactionData.AmountAsset1 != nil {
-		newBalance = currentBalance - *transactionData.AmountAsset1
+	if debitTransaction.CashAmount != nil {
+		newBalance = currentBalance - *debitTransaction.CashAmount
 	} else {
-		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
+		// Handle the case where CashAmount is nil, maybe keep the currentBalance as is
 		newBalance = currentBalance
 	}
 	var availableBalance float64
-	if transactionData.AmountAsset1 != nil {
-		availableBalance = currentAvailableBalance
+	if debitTransaction.CashAmount != nil {
+		availableBalance = currentAvailableBalance - *debitTransaction.CashAmount
 	} else {
 		availableBalance = currentAvailableBalance
 	}
 
+	/* CALCULATES BALANCE FOR HOUSE */
 	var newBalanceHouse float64
-	if transactionData.AmountAsset1 != nil {
-		newBalanceHouse = currentBalanceHouse - *transactionData.AmountAsset1
+	if creditTransaction.CashAmount != nil {
+		newBalanceHouse = currentBalanceHouse + *creditTransaction.CashAmount
 	} else {
-		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
+		// Handle the case where CashAmount is nil, maybe keep the currentBalance as is
 		newBalanceHouse = currentBalanceHouse
 	}
 	var availableBalanceHouse float64
-	if transactionData.AmountAsset1 != nil {
-		availableBalanceHouse = currentAvailableBalanceHouse
+	if creditTransaction.CashAmount != nil {
+		availableBalanceHouse = currentAvailableBalanceHouse + *creditTransaction.CashAmount
 	} else {
 		availableBalanceHouse = currentAvailableBalanceHouse
 	}
@@ -375,13 +351,17 @@ func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context,
 }
 
 func (s *TransactionService) CreateWithdrawal(c *gin.Context, userID string, transactionData *models.Transaction) (uuid.UUID, uuid.UUID, error) {
+	//Gets UUID for the current authenticated user
 	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, errors.New("invalid user ID")
 	}
 
+	//Generates ordernumber
 	OrderNumber := orderno.GenerateOrderNumber()
-	houseAccountID, err := utils.GetHouseAccount(c) // Assuming GetHouseAccount does not require context
+
+	//Fetches house account
+	houseAccountID, err := utils.GetHouseAccount(c)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
@@ -391,114 +371,101 @@ func (s *TransactionService) CreateWithdrawal(c *gin.Context, userID string, tra
 		return uuid.Nil, uuid.Nil, err
 	}
 
-	debitTransactionID := uuid.New()
-	creditTransactionID := uuid.New()
+	clientTransactionID := uuid.New()
+	houseTransactionID := uuid.New()
 
-	// Debit transaction - already bound from the request
-	debitTransaction := transactionData
-	debitTransaction.Id = debitTransactionID
-	debitTransaction.CreatedAt = time.Now()
-	debitTransaction.UpdatedAt = time.Now()
-	debitTransaction.CreatedById = userUUID
-	debitTransaction.UpdatedById = userUUID
-	debitTransaction.OrderNumber = OrderNumber
+	clientTransaction := *transactionData
+	clientTransaction.Id = clientTransactionID
+	clientTransaction.CreatedById = userUUID
+	clientTransaction.UpdatedById = userUUID
+	clientTransaction.CreatedAt = time.Now()
+	clientTransaction.UpdatedAt = time.Now()
+	clientTransaction.Corrected = false
+	clientTransaction.Corrected = false
+	clientTransaction.OrderNumber = OrderNumber
 
-	creditTransaction := &models.Transaction{
-		Id:                 creditTransactionID, // Assign the generated UUID
-		Type:               debitTransaction.Type,
-		CreatedById:        userUUID,
-		UpdatedById:        userUUID,
-		Asset1Id:           debitTransaction.Asset1Id,
-		AmountAsset1:       debitTransaction.AmountAsset1,
-		CreatedAt:          time.Now(), // Use time.Now() to set to current time
-		UpdatedAt:          time.Now(),
-		Comment:            debitTransaction.Comment,
-		TransactionOwnerId: debitTransaction.TransactionOwnerId,
-		AccountOwnerId:     houseAccountUUID,
-		AccountAsset1Id:    debitTransaction.AccountAsset2Id,
-		AccountAsset2Id:    uuid.Nil,
-		OrderNumber:        OrderNumber,
-		Trade_date:         debitTransaction.Trade_date,      // Set to zero time if not used
-		Settlement_date:    debitTransaction.Settlement_date, // Set to zero time if not used
-	}
+	houseTransaction := clientTransaction
+	houseTransaction.Id = houseTransactionID
+	houseTransaction.TransactionOwnerAccountId = houseAccountUUID
 
 	/* CHECKS THE BALANCE OF THE CUSTOMER ACCOUNT */
-	currentBalance, err := s.transactionRepo.GetAccountBalance(transactionData.AccountAsset1Id)
+	currentBalance, err := s.transactionRepo.GetAccountBalance(clientTransaction.TransactionOwnerAccountId)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
-	}
-	currentAvailableBalance, err := s.transactionRepo.GetAccountAvailableBalance(transactionData.AccountAsset1Id)
-	if err != nil {
+		fmt.Printf("error in currentBalance: %v")
 		return uuid.Nil, uuid.Nil, err
 	}
 
-	/*BALANCE CHEKC FOR HOUSE */
-	currentBalanceHouse, err := s.transactionRepo.GetAccountBalance(creditTransaction.AccountAsset1Id)
+	currentAvailableBalance, err := s.transactionRepo.GetAccountAvailableBalance(clientTransaction.TransactionOwnerAccountId)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
-	}
-	currentAvailableBalanceHouse, err := s.transactionRepo.GetAccountAvailableBalance(creditTransaction.AccountAsset1Id)
-	if err != nil {
+		fmt.Printf("error in currentAvailableBalance: %v")
 		return uuid.Nil, uuid.Nil, err
 	}
 
-	/* CALCULATES BALANCE FOR CUSTOMER */
-	var newBalance float64
-	if transactionData.AmountAsset1 != nil {
-		newBalance = currentBalance - *transactionData.AmountAsset1
+	/* BALANCE CHECK FOR HOUSE */
+
+	currentBalanceHouse, err := s.transactionRepo.GetAccountBalance(houseAccountUUID)
+	if err != nil {
+		fmt.Printf("error in currentBalanceHouse: %v")
+		return uuid.Nil, uuid.Nil, err
+	}
+
+	currentAvailableBalanceHouse, err := s.transactionRepo.GetAccountAvailableBalance(houseAccountUUID)
+	if err != nil {
+		fmt.Printf("error in currentAvailableBalanceHouse: %v")
+		return uuid.Nil, uuid.Nil, err
+	}
+	fmt.Printf("currentAvailableBalanceHouse before calculation: ", currentAvailableBalance)
+	/* CALCULATES BALANCE FOR CUSTOMER AND HOUSE */
+	var newBalance, availableBalance, newBalanceHouse, availableBalanceHouse float64
+	if clientTransaction.CashAmount != nil {
+		newBalance = currentBalance - *clientTransaction.CashAmount
+		availableBalance = currentAvailableBalance - *clientTransaction.CashAmount
+		newBalanceHouse = currentBalanceHouse - *clientTransaction.CashAmount // Assuming house loses this amount
+		availableBalanceHouse = currentAvailableBalanceHouse - *clientTransaction.CashAmount
 	} else {
-		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
 		newBalance = currentBalance
-	}
-	var availableBalance float64
-	if transactionData.AmountAsset1 != nil {
-		availableBalance = currentAvailableBalance - *transactionData.AmountAsset1
-	} else {
 		availableBalance = currentAvailableBalance
-	}
-
-	var newBalanceHouse float64
-	if transactionData.AmountAsset1 != nil {
-		newBalanceHouse = currentBalanceHouse - *transactionData.AmountAsset1
-	} else {
-		// Handle the case where AmountAsset1 is nil, maybe keep the currentBalance as is
 		newBalanceHouse = currentBalanceHouse
-	}
-	var availableBalanceHouse float64
-	if transactionData.AmountAsset1 != nil {
-		availableBalanceHouse = currentAvailableBalanceHouse - *transactionData.AmountAsset1
-	} else {
 		availableBalanceHouse = currentAvailableBalanceHouse
 	}
 
-	transactionAmount := *transactionData.AmountAsset1
+	var cashAmountStr string
+	if clientTransaction.CashAmount != nil {
+		cashAmountStr = strconv.FormatFloat(*houseTransaction.CashAmount, 'f', 2, 64)
+	} else {
+		cashAmountStr = "default_value" // Or any other appropriate handling
+	}
 
-	if availableBalance < transactionAmount {
+	fmt.Println(cashAmountStr)
+	fmt.Println(availableBalance)
+	if currentAvailableBalance < *clientTransaction.CashAmount {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("insufficient funds in customer's account")
 	}
 
-	if availableBalanceHouse < transactionAmount {
+	fmt.Println(cashAmountStr)
+	fmt.Println(availableBalanceHouse)
+	if currentAvailableBalanceHouse < *houseTransaction.CashAmount {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("insufficient funds in house account")
 	}
 
-	err = s.transactionRepo.UpdateAccountBalance(debitTransaction.AccountAsset1Id, newBalance, availableBalance)
+	err = s.transactionRepo.UpdateAccountBalance(clientTransaction.CashAccountId, newBalance, availableBalance)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
-	err = s.transactionRepo.UpdateAccountBalance(creditTransaction.AccountAsset1Id, newBalanceHouse, availableBalanceHouse)
+	err = s.transactionRepo.UpdateAccountBalance(houseTransaction.CashAccountId, newBalanceHouse, availableBalanceHouse)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
 
 	// Insert into database using repository
-	err = s.transactionRepo.InsertTransaction(debitTransaction)
+	err = s.transactionRepo.InsertTransaction(&clientTransaction)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
-	err = s.transactionRepo.InsertTransaction(creditTransaction)
+	err = s.transactionRepo.InsertTransaction(&houseTransaction)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
 
-	return debitTransactionID, creditTransactionID, nil
+	return clientTransactionID, houseTransactionID, nil
 }

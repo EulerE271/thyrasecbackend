@@ -18,7 +18,6 @@ func ExtractTokenFromCookie(r *http.Request) (string, error) {
 
 	// The entire cookie value is treated as the token
 	tokenString := cookie.Value
-	fmt.Printf("Token: ", tokenString)
 
 	// Return the token value
 	return tokenString, nil

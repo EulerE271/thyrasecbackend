@@ -7,52 +7,56 @@ import (
 )
 
 type Transaction struct {
-	Id                 uuid.UUID `json:"id" db:"id"`
-	TransactionOwnerId uuid.UUID `json:"transaction_owner_id" db:"transaction_owner_id"`
-	AccountOwnerId     uuid.UUID `json:"account_owner_id" db:"account_owner_id"`
-	Type               uuid.UUID `json:"type" db:"type"`
-	Asset1Id           uuid.UUID `json:"asset1_id" db:"asset1_id"`                 // Nullable field
-	Asset2Id           uuid.UUID `json:"asset2_id" db:"asset2_id"`                 // Nullable field
-	AccountAsset1Id    uuid.UUID `json:"account_asset1_id" db:"account_asset1_id"` // Nullable field
-	AccountAsset2Id    uuid.UUID `json:"account_asset2_id" db:"account_asset2_id"` // Nullable field
-	AmountAsset1       *float64  `json:"amount_asset1" db:"amount_asset1"`         // Nullable field
-	AmountAsset2       *float64  `json:"amount_asset2" db:"amount_asset2"`         // Nullable field
-	CreatedById        uuid.UUID `json:"created_by_id" db:"created_by_id"`
-	UpdatedById        uuid.UUID `json:"updated_by_id" db:"updated_by_id"`
-	CreatedAt          time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
-	Corrected          bool      `json:"corrected" db:"corrected"`
-	Canceled           bool      `json:"canceled" db:"canceled"`
-	Comment            *string   `json:"comment" db:"comment"` // Nullable field
-	Asset2_currency    uuid.UUID `json:"asset2_currency" db:"asset2_currency"`
-	Asset2_price       uuid.UUID `json:"asset2_price" db:"asset2_price"`
-	OrderNumber        string    `json:"order_no" db:"order_no"`
-	BusinessEvent      uuid.UUID `json:"business_event" db:"business_event"`
-	Trade_date         time.Time `json:"trade_date" db:"trade_date"`
-	Settlement_date    time.Time `json:"settlement_date" db:"settlement_date"`
+	Id                        uuid.UUID `json:"id" db:"id"`
+	Type                      uuid.UUID `json:"type" db:"type"`
+	AssetId                   uuid.UUID `json:"asset_id" db:"asset_id"`                 // Nullable field
+	CashAmount                *float64  `json:"cash_amount" db:"cash_amount"`           // Nullable field
+	AssetQuantity             *float64  `json:"asset_quantity" db:"asset_quantity"`     // Nullable field
+	CashAccountId             uuid.UUID `json:"cash_account_id" db:"cash_account_id"`   // Nullable field
+	AssetAccountId            uuid.UUID `json:"asset_account_id" db:"asset_account_id"` // Nullable field
+	AssetType                 uuid.UUID `json:"asset_type" db:"asset_type"`
+	TransactionCurrency       uuid.UUID `json:"transaction_currency" db:"transaction_currency"`
+	AssetPrice                *float64  `json:"asset_price" db:"asset_price"` // Nullable field
+	CreatedById               uuid.UUID `json:"created_by_id" db:"created_by_id"`
+	UpdatedById               uuid.UUID `json:"updated_by_id" db:"updated_by_id"`
+	CreatedAt                 time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt                 time.Time `json:"updated_at" db:"updated_at"`
+	Corrected                 bool      `json:"corrected" db:"corrected"`
+	Canceled                  bool      `json:"canceled" db:"canceled"`
+	Comment                   *string   `json:"comment" db:"comment"` // Nullable field
+	TransactionOwnerId        uuid.UUID `json:"transaction_owner_id" db:"transaction_owner_id"`
+	TransactionOwnerAccountId uuid.UUID `json:"transaction_owner_account_id" db:"transaction_owner_account_id"` // New field
+	TradeDate                 time.Time `json:"trade_date" db:"trade_date"`
+	SettlementDate            time.Time `json:"settlement_date" db:"settlement_date"`
+	OrderNumber               string    `json:"order_no" db:"order_no"`
+	BusinessEvent             uuid.UUID `json:"business_event" db:"business_event"`
 }
 
 func InitializeTransaction(createdBy, transactionType uuid.UUID, comment *string) Transaction {
 	now := time.Now()
 	return Transaction{
-		Id:          uuid.New(), // Generate a new UUID for the transaction
+		Id:          uuid.New(),
 		CreatedById: createdBy,
-		UpdatedById: createdBy, // Assuming the creator is also the one performing the update
+		UpdatedById: createdBy,
 		CreatedAt:   now,
 		UpdatedAt:   now,
-		Corrected:   false, // Default to false, assuming the transaction isn't corrected at the time of creation
-		Canceled:    false, // Default to false, assuming the transaction isn't canceled at the time of creation
+		Corrected:   false,
+		Canceled:    false,
 		Type:        transactionType,
 		Comment:     comment,
 		// The following fields are nullable and should be set explicitly when needed:
-		// Asset1Id:
-		// Asset2Id:
-		// AccountAsset1Id:
-		// AccountAsset2Id:
-		// AmountAsset1:
-		// AmountAsset2:
-		// Asset2_currency:
-		// Asset2_price:
+		// AssetId:
+		// CashAmount:
+		// AssetQuantity:
+		// CashAccountId:
+		// AssetAccountId:
+		// AssetType:
+		// TransactionCurrency:
+		// AssetPrice:
+		// TransactionOwnerId:
+		// TransactionOwnerAccountId:
+		// TradeDate:
+		// SettlementDate:
 		// OrderNumber:
 		// BusinessEvent:
 	}
@@ -60,42 +64,46 @@ func InitializeTransaction(createdBy, transactionType uuid.UUID, comment *string
 
 func (t *Transaction) ToMap() map[string]interface{} {
 	return map[string]interface{}{
-		"id":                   t.Id,
-		"transaction_owner_id": t.TransactionOwnerId,
-		"account_owner_id":     t.AccountOwnerId,
-		"type":                 t.Type,
-		"asset1_id":            t.Asset1Id,
-		"asset2_id":            t.Asset2Id,
-		"account_asset1_id":    t.AccountAsset1Id,
-		"account_asset2_id":    t.AccountAsset2Id,
-		"amount_asset1":        t.AmountAsset1,
-		"amount_asset2":        t.AmountAsset2,
-		"created_by_id":        t.CreatedById,
-		"updated_by_id":        t.UpdatedById,
-		"created_at":           t.CreatedAt,
-		"updated_at":           t.UpdatedAt,
-		"corrected":            t.Corrected,
-		"canceled":             t.Canceled,
-		"comment":              t.Comment,
+		"id":                           t.Id,
+		"type":                         t.Type,
+		"asset_id":                     t.AssetId,
+		"cash_amount":                  t.CashAmount,
+		"asset_quantity":               t.AssetQuantity,
+		"cash_account_id":              t.CashAccountId,
+		"asset_account_id":             t.AssetAccountId,
+		"asset_type":                   t.AssetType,
+		"transaction_currency":         t.TransactionCurrency,
+		"asset_price":                  t.AssetPrice,
+		"created_by_id":                t.CreatedById,
+		"updated_by_id":                t.UpdatedById,
+		"created_at":                   t.CreatedAt,
+		"updated_at":                   t.UpdatedAt,
+		"corrected":                    t.Corrected,
+		"canceled":                     t.Canceled,
+		"comment":                      t.Comment,
+		"transaction_owner_id":         t.TransactionOwnerId,
+		"transaction_owner_account_id": t.TransactionOwnerAccountId,
+		"trade_date":                   t.TradeDate,
+		"settlement_date":              t.SettlementDate,
+		"order_no":                     t.OrderNumber,
+		"business_event":               t.BusinessEvent,
 	}
 }
 
-//Model for displaying transaction together with the owner of the transactions name
 type TransactionDisplay struct {
-	Transaction                        // Embed the original Transaction struct
-	OwnerName                string    `json:"owner_name" db:"owner_name"`
-	TypeName                 string    `json:"type_name" db:"type_name"`
-	AccountAsset1AccountName string    `json:"account_asset1_account_name" db:"account_asset1_account_name"`
-	AccountAsset2AccountName string    `json:"account_asset2_account_name" db:"account_asset2_account_name"`
-	TransactionTypeName      string    `json:"transaction_type_name" db:"transaction_type_name"`
-	StatusLabel              string    `json:"status_label" db:"status_label"`
-	StatusID                 uuid.UUID `json:"status_id" db:"status_id"`
-	Description              string    `json:"description" db:"description"`
-	TypeID                   uuid.UUID `json:"type_id" db:"type_id"`
-	AccountNumber            string    `json:"account_number" db:"account_number"`
+	Transaction                   // Embed the updated Transaction struct
+	OwnerName           string    `json:"owner_name" db:"owner_name"`
+	TypeName            string    `json:"type_name" db:"type_name"`
+	CashAccountName     string    `json:"cash_account_name" db:"cash_account_name"`   // Updated
+	AssetAccountName    string    `json:"asset_account_name" db:"asset_account_name"` // Updated
+	TransactionTypeName string    `json:"transaction_type_name" db:"transaction_type_name"`
+	StatusLabel         string    `json:"status_label" db:"status_label"`
+	StatusID            uuid.UUID `json:"status_id" db:"status_id"`
+	Description         string    `json:"description" db:"description"`
+	TypeID              uuid.UUID `json:"type_id" db:"type_id"`
+	AccountNumber       string    `json:"account_number" db:"account_number"`
 }
 
-//Model for returning transaction types as defined in transaction_types table
 type TransactionType struct {
 	Id                       int    `json:"id"`
 	TypeID                   string `json:"type_id" db:"type_id"`
@@ -103,7 +111,6 @@ type TransactionType struct {
 	TransactionTypeShortName string `db:"trt_short_name" json:"trt_short_name"`
 }
 
-//Defines the request sent to acounts service for updating balance when creating a transaction.
 type BalanceRequest struct {
 	AccountId uuid.UUID `json:"id" db:"id"`
 	Amount    *int      `json:"amount" db:"amount"`
