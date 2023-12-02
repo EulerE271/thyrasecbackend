@@ -3,18 +3,15 @@ package main
 import (
 	"log"
 	"os"
-	accountHandlers "thyra/internal/accounts/api/accounts"
-	repository "thyra/internal/accounts/repositories"
-	accounts "thyra/internal/accounts/routes"
-	accountServices "thyra/internal/accounts/services"
-	assetHandlers "thyra/internal/assets/api/assets"
-	"thyra/internal/assets/repositories" // Replace with the actual path to your repositories
-	assets "thyra/internal/assets/routes"
-	"thyra/internal/assets/services" // Replace with the actual path to your services
+	accounthandler "thyra/internal/accounts/api/accounts"
+	accountrepository "thyra/internal/accounts/repositories"
+	accountroutes "thyra/internal/accounts/routes"
+	accountservice "thyra/internal/accounts/services"
+	assetroutes "thyra/internal/assets/routes"
 	"thyra/internal/common/db"
 	middle "thyra/internal/common/middleware"
-	transactions "thyra/internal/transactions/routes"
-	routes "thyra/internal/users/routes"
+	transactionroutes "thyra/internal/transactions/routes"
+	"thyra/internal/users/routes"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -77,30 +74,26 @@ func main() {
 
 	v1 := r.Group("/v1")
 
-	repo := repositories.NewHoldingsRepository(db.GetDB())
-	service := services.NewHoldingsService(repo)
-	holdingsHandler := assetHandlers.NewHoldingsHandler(service)
+	//repo := positionrepository.NewHoldingsRepository(db.GetDB())
+	//service := positionservice.NewHoldingsService(repo)
+	//holdingsHandler := positionshandler.NewHoldingsHandler(service) */
 
-	accountValueRepo := repository.NewAccountValueRepository(db.GetDB().DB)            // If renamed
-	accountValueService := accountServices.NewAccountValueService(accountValueRepo)    // If renamed
-	accountValueHandler := accountHandlers.NewAccountValueHandler(accountValueService) // If renamed
+	accountValueRepo := accountrepository.NewAccountBalanceRepository(db.GetDB().DB)    // If renamed
+	accountValueService := accountservice.NewAccountBalanceService(accountValueRepo)    // If renamed
+	accountValueHandler := accounthandler.NewAccountBalanceHandler(accountValueService) // If renamed
 
-	accountPerformanceRepo := repository.NewAccountPerformanceRepository(db.GetDB().DB)
-
-	// Initialize the AccountPerformanceService
-	accountPerformanceService := accountServices.NewAccountPerformanceService(accountPerformanceRepo)
-
-	// Initialize the AccountHandler
-	accountPerformanceHandler := accountHandlers.NewAccountPerformanceHandler(accountPerformanceService)
+	//accountPerformanceRepo := accountperformancerepository.NewAccountPerformanceRepository(db.GetDB().DB)
+	//accountPerformanceService := accountperformanceservice.NewAccountPerformanceService(accountPerformanceRepo)
+	//accountPerformanceHandler := accountperformancehandler.NewAccountPerformanceHandler(accountPerformanceService)
 
 	// Setup routes
 	routes.SetupRoutes(r)
 	v1.Use(middle.DBContext())
 	v1.Use(middle.TokenMiddleware)
 	// Setup module-specific routes
-	transactions.SetupRoutes(v1) // Setup rout
-	accounts.SetupRoutes(v1, accountValueHandler, accountPerformanceHandler)
-	assets.SetupRoutes(v1, holdingsHandler)
+	transactionroutes.SetupRoutes(v1) // Setup rout
+	accountroutes.SetupRoutes(v1, accountValueHandler)
+	assetroutes.SetupRoutes(v1)
 
 	// Set up your routes by calling the SetupRoutes function from the "routes" package
 

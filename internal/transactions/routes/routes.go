@@ -1,6 +1,6 @@
 // /internal/transactions/api/routes.go
 
-package transactions
+package routes
 
 import (
 	middleware "thyra/internal/common/middleware"      // Middleware imports

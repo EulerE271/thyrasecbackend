@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.RouterGroup, accountValueHandler *handlers.AccountValueHandler, accountPerformanceHandler *handlers.AccountPerformanceHandler) {
+func SetupRoutes(router *gin.RouterGroup, accountValueHandler *handlers.AccountBalanceHandler) {
 	router.POST("/create/account", handlers.CreateAccountHandler)
 	router.GET("/user/:userId/accounts", handlers.GetAccountsByUser)
 	router.GET("/accounts", handlers.GetAllAccounts)
@@ -17,8 +17,4 @@ func SetupRoutes(router *gin.RouterGroup, accountValueHandler *handlers.AccountV
 
 	router.GET("/user/:userId/aggregated-values", accountValueHandler.GetAggregatedValues)
 	router.GET("/account/:accountId/values", accountValueHandler.GetSpecificAccountValue)
-
-	// Correctly use the method from accountPerformanceHandler
-	router.GET("/account/:accountId/performance-change", accountPerformanceHandler.GetAccountPerformanceChange)
-	router.GET("/user/:userId/performance-change", accountPerformanceHandler.GetUserPerformanceChange)
 }
