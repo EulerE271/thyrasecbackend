@@ -8,13 +8,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.RouterGroup, accountValueHandler *handlers.AccountBalanceHandler) {
-	router.POST("/create/account", handlers.CreateAccountHandler)
-	router.GET("/user/:userId/accounts", handlers.GetAccountsByUser)
-	router.GET("/accounts", handlers.GetAllAccounts)
-	router.GET("/account-types", handlers.GetAccountTypes)
-	router.GET("/account/house", handlers.GetHouseAccount)
+func SetupRoutes(router *gin.RouterGroup, accountBalanceHandler *handlers.AccountBalanceHandler, accountHandler *handlers.AccountHandler) {
+	router.POST("/create/account", accountHandler.CreateAccount)
+	router.GET("/user/:userId/accounts", accountHandler.GetAccountsByUser)
+	router.GET("/accounts", accountHandler.GetAllAccounts)
+	router.GET("/account-types", accountHandler.GetAccountTypes)
+	router.GET("/account/house", accountHandler.GetHouseAccount)
 
-	router.GET("/user/:userId/aggregated-values", accountValueHandler.GetAggregatedValues)
-	router.GET("/account/:accountId/values", accountValueHandler.GetSpecificAccountValue)
+	router.GET("/user/:userId/aggregated-values", accountBalanceHandler.GetAggregatedValues)
+	router.GET("/account/:accountId/values", accountBalanceHandler.GetSpecificAccountValue)
 }

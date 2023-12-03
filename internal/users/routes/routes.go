@@ -7,18 +7,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.Engine) {
+func SetupRoutes(router *gin.Engine, userHandler *handlers.UserHandler, authHandler *handlers.AuthHandler) {
 	// Public route
-	router.POST("/v1/login", handlers.LoginHandler) // This route is public and outside the protected group
-	router.GET("/v1/cookie-test", handlers.CookieTestHandler)
+	router.POST("/v1/login", authHandler.LoginHandler) // This route is public and outside the protected group
 	// Group for version 1 APIs with Token Middleware
 	v1 := router.Group("/v1")
 	v1.Use(middleware.TokenMiddleware) // Apply token middleware to all routes in this group
 
 	// Protected routes
-	v1.POST("/register/admin", handlers.RegisterAdminHandler)
-	v1.POST("/register/partner", handlers.RegisterPartnerAdvisorHandler)
-	v1.POST("/register/customer", handlers.RegisterCustomerHandler)
-	v1.GET("/fetch/users", handlers.GetAllUsersHandler)
-	v1.GET("/fetch/username", handlers.GetUserNameByUuid) // Protected route
+	v1.POST("/register/admin", userHandler.RegisterAdminHandler)
+	v1.POST("/register/partner", userHandler.RegisterPartnerAdvisorHandler)
+	v1.POST("/register/customer", userHandler.RegisterCustomerHandler)
+	v1.GET("/fetch/users", userHandler.GetAllUsersHandler)
+	v1.GET("/fetch/username", userHandler.GetUserNameByUuid) // Protected route
 }

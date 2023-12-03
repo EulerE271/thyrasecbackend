@@ -1,4 +1,4 @@
-package customerno
+package utils
 
 import (
 	"fmt"

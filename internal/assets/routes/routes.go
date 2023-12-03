@@ -6,10 +6,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.RouterGroup) {
+func SetupRoutes(router *gin.RouterGroup, assetHandler *handlers.AssetsHandler) {
 
-	router.GET("/instruments", handlers.GetAllInstruments)
-	router.GET("/types/asset", handlers.GetAllAssetTypes)
-	router.POST("/create/instruments", handlers.CreateInstrument)
+	router.GET("/instruments", assetHandler.GetAllInstruments)
+	router.GET("/types/asset", assetHandler.GetAllAssetTypes)
+	router.POST("/create/instruments", assetHandler.CreateInstrument)
 
 }
