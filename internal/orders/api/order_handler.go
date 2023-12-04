@@ -107,8 +107,8 @@ func CreateBuyOrderHandler(c *gin.Context) {
 	}
 
 	// Insert the order into the database.
-	stmt := `INSERT INTO thyrasec.orders (id, account_id, asset_id, order_type, quantity, price_per_unit, total_amount, status, created_at, updated_at, trade_date, settlement_date, owner_id, comment) 
-              VALUES (:id, :account_id, :asset_id, :order_type, :quantity, :price_per_unit, :total_amount, :status, NOW(), NOW(), :trade_date, :settlement_date, :owner_id, :comment)`
+	stmt := `INSERT INTO thyrasec.orders (id, account_id, asset_id, order_type, quantity, price_per_unit, total_amount, status, created_at, updated_at, trade_date, settlement_date, owner_id, comment, order_number) 
+              VALUES (:id, :account_id, :asset_id, :order_type, :quantity, :price_per_unit, :total_amount, :status, NOW(), NOW(), :trade_date, :settlement_date, :owner_id, :comment, :order_number)`
 	_, err = tx.NamedExec(stmt, newOrder)
 	if err != nil {
 		tx.Rollback()
