@@ -346,8 +346,8 @@ func SettlementHandler(c *gin.Context) {
 		Comment:                   order.Comment,
 		TransactionOwnerId:        order.OwnerID,
 		TransactionOwnerAccountId: order.AccountID,
-		TradeDate:                 order.TradeDate,
-		SettlementDate:            order.SettlementDate,
+		TradeDate:                 *settlementRequest.TradeDate,
+		SettlementDate:            *settlementRequest.SettlementDate,
 		OrderNumber:               orderNumber,
 	}
 

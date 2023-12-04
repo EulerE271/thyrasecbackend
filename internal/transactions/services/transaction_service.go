@@ -206,17 +206,16 @@ func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context,
 	houseCashTransaction := *transactionData
 	houseCashTransaction.TransactionOwnerAccountId = houseAccountUUID
 	houseCashTransaction.Id = uuid.New()
-	clientCashTransaction.AssetQuantity = nil
+	houseCashTransaction.AssetQuantity = nil
 
-	clientInstrumentTransaction := *transactionInstrumentData
+	clientInstrumentTransaction := *transactionData
 	clientInstrumentTransaction.CashAmount = nil
 	clientInstrumentTransaction.Id = uuid.New()
 
-	houseInstrumentTransaction := *transactionInstrumentData
+	houseInstrumentTransaction := *transactionData
 	houseInstrumentTransaction.TransactionOwnerAccountId = houseAccountUUID
 	houseInstrumentTransaction.Id = uuid.New()
-	clientInstrumentTransaction.CashAmount = nil
-	clientInstrumentTransaction.Id = uuid.New()
+	houseInstrumentTransaction.CashAmount = nil
 
 	/* CHECKS THE BALANCE OF THE CUSTOMER ACCOUNT */
 	currentBalance, err := s.transactionRepo.GetAccountBalance(clientCashTransaction.TransactionOwnerAccountId)
