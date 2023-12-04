@@ -9,6 +9,7 @@ import (
 	"thyra/internal/orders/models"
 	"thyra/internal/orders/repositories"
 	"thyra/internal/orders/services"
+	"thyra/internal/orders/utils"
 	orderutils "thyra/internal/orders/utils"
 	positionmodel "thyra/internal/positions/models"
 	transactionModels "thyra/internal/transactions/models"
@@ -78,10 +79,18 @@ func CreateBuyOrderHandler(c *gin.Context) {
 	}
 
 	totalAmountDecimal := decimal.NewFromFloat(newOrder.TotalAmount)
-
+	orderNumber := utils.GenerateOrderNumber()
+	newOrder.OrderNumber = orderNumber
 	// Generate a new UUID for the order.
 	newOrder.ID = uuid.New()
 	newOrder.Status = models.StatusCreated
+	newOrder.OrderNumber = utils.GenerateOrderNumber()
+
+	houseAccount, err := accountutils.GetHouseAccount(c)
+	if err != nil {
+		log.Fatalf("error fetching house account: %v", err)
+	}
+	houseAccountUUID := uuid.MustParse(houseAccount)
 
 	// Get a database connection.
 	dbConn := db.GetConnection(c)
@@ -108,6 +117,12 @@ func CreateBuyOrderHandler(c *gin.Context) {
 	}
 
 	if err := services.CheckAndReserveCash(tx, newOrder.AccountID, totalAmountDecimal); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reserve cash", "details": err.Error()})
+		return
+	}
+
+	if err := services.CheckAndReserveCash(tx, houseAccountUUID, totalAmountDecimal); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reserve cash", "details": err.Error()})
 		return
@@ -301,6 +316,10 @@ func SettlementHandler(c *gin.Context) {
 		return
 	} */
 
+	transactionType, err := repositories.GetTransactionTypeByOrderTypeID(sqlxDB, order.OrderType)
+	if err != nil {
+		log.Fatalf("Error fetching transactionTyper: %v", err)
+	}
 	orderNumber := orderutils.GenerateOrderNumber()
 
 	transactionRepo := transactionRepository.NewTransactionRepository(sqlxDB)
@@ -309,10 +328,10 @@ func SettlementHandler(c *gin.Context) {
 	clientCashTransaction := transactionModels.Transaction{
 
 		Id:                        uuid.New(),
-		Type:                      order.OrderType,
+		Type:                      transactionType,
 		AssetId:                   order.AssetID,
-		CashAmount:                order.SettledAmount,
-		AssetQuantity:             order.SettledQuantity,
+		CashAmount:                &settlementRequest.SettledAmount,
+		AssetQuantity:             &settlementRequest.SettledQuantity,
 		CashAccountId:             order.AccountID,
 		AssetAccountId:            order.AccountID,
 		AssetType:                 assetType,
@@ -363,7 +382,7 @@ func SettlementHandler(c *gin.Context) {
 	}
 
 	// Release the reservation
-	err = repositories.ReleaseReservation(sqlxDB, orderID)
+	err = repositories.ReleaseReservation(sqlxDB, orderID, houseAccount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to release reservation", "details": err.Error()})
 		return
@@ -394,4 +413,44 @@ func SettlementHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Order settled successfully"})
+}
+
+func GetOrderTypeByName(c *gin.Context) {
+	db := db.GetDB() // Replace GetDB with your actual method to get the DB connection
+
+	name := c.Query("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Order type name is required"})
+		return
+	}
+
+	orderType, err := repositories.GetOrderTypeByName(db, name)
+	if err != nil {
+		// Handle errors, such as not finding the order type
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"order_type_id": orderType})
+
+}
+
+func GetOrderTypeByID(c *gin.Context) {
+	db.GetDB()
+
+	id := c.Query("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Order ID  is required"})
+	}
+
+	UUID := uuid.MustParse(id)
+
+	orderType, err := repositories.GetOrderType(&sqlx.Tx{}, UUID)
+	if err != nil {
+		// Handle errors, such as not finding the order type
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"order_type_name": orderType})
 }

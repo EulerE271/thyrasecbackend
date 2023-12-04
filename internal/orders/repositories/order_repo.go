@@ -112,13 +112,13 @@ func GetOrder(db *sqlx.DB, orderID string) (*models.Order, error) {
 
 func GetOrderType(db *sqlx.Tx, id uuid.UUID) (string, error) {
 
-	var orderTypeName uuid.UUID
+	var orderTypeName string
 	query := "SELECT order_type_name FROM order_types WHERE id = $1"
-	if err := db.Get(&orderTypeName, query); err != nil {
+	if err := db.Get(&orderTypeName, query, id); err != nil {
 		return "", err
 	}
 
-	return orderTypeName.String(), nil
+	return orderTypeName, nil
 }
 
 func UpdateOrderStatus(tx *sqlx.Tx, orderID string, status models.OrderStatusType) error {
@@ -153,7 +153,7 @@ func CheckAvailableCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal
 	return availableCash.GreaterThanOrEqual(amount), nil
 }
 
-func ReleaseReservation(db *sqlx.DB, orderID string) error {
+func ReleaseReservation(db *sqlx.DB, orderID string, houseAccount string) error {
 	var accountID uuid.UUID
 	var amount decimal.Decimal
 
@@ -169,6 +169,12 @@ func ReleaseReservation(db *sqlx.DB, orderID string) error {
 	// Update account reserved cash
 	updateAccountQuery := `UPDATE thyrasec.accounts SET reserved_cash = reserved_cash - $1 WHERE id = $2`
 	_, err = db.Exec(updateAccountQuery, amount, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to update account reserved cash: %w", err)
+	}
+
+	updateHouseQuery := `UPDATE thyrasec.accounts SET reserved_cash = reserved_cash - $1 WHERE id = $2`
+	_, err = db.Exec(updateHouseQuery, amount, houseAccount)
 	if err != nil {
 		return fmt.Errorf("failed to update account reserved cash: %w", err)
 	}
@@ -245,4 +251,24 @@ func GetAssetType(db *sqlx.DB, assetId uuid.UUID) (uuid.UUID, error) {
 		return uuid.Nil, err
 	}
 	return assetType, nil
+}
+
+func GetOrderTypeByName(db *sqlx.DB, name string) (uuid.UUID, error) {
+	var orderType uuid.UUID
+	query := "SELECT id FROM order_types WHERE order_type_name = $1"
+	if err := db.Get(&orderType, query, name); err != nil {
+		return uuid.Nil, err
+	}
+
+	return orderType, nil
+}
+
+func GetTransactionTypeByOrderTypeID(db *sqlx.DB, orderTypeID uuid.UUID) (uuid.UUID, error) {
+	var transactionType uuid.UUID
+	query := "SELECT transaction_type_id FROM thyrasec.order_types WHERE Id = $1"
+	if err := db.Get(&transactionType, query, orderTypeID); err != nil {
+		return uuid.Nil, err
+	}
+
+	return transactionType, nil
 }

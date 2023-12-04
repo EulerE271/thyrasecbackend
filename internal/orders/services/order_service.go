@@ -2,6 +2,8 @@ package services
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"thyra/internal/orders/models"
 	"thyra/internal/orders/repositories"
 	"time"
@@ -75,6 +77,7 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 	// Retrieve the order to confirm
 	order, err := repositories.GetOrder(db, orderID)
 	if err != nil {
+		log.Fatalf("error in order: %v", err)
 		tx.Rollback()
 		return err
 	}
@@ -84,9 +87,10 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 		tx.Rollback()
 		return errors.New("order cannot be confirmed in its current state")
 	}
-
+	fmt.Printf("ordertype: %v", order.OrderType)
 	orderTypeName, err := repositories.GetOrderType(tx, order.OrderType)
 	if err != nil {
+		log.Fatalf("error in orderTypename: %v", err)
 		tx.Rollback()
 		return err
 	}
@@ -96,6 +100,7 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 		totalAmountDecimal := decimal.NewFromFloat(order.TotalAmount)
 		_, err := repositories.CheckAvailableCash(tx, order.AccountID, totalAmountDecimal)
 		if err != nil {
+			log.Fatalf("error in checkAvailableCash: %v", err)
 			tx.Rollback()
 			return err
 		}
@@ -126,6 +131,7 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 
 	// Update order status to confirmed
 	if err := repositories.UpdateOrderStatus(tx, orderID, models.StatusConfirmed); err != nil {
+		log.Fatalf("error in updateorderstatus: %v", err)
 		tx.Rollback()
 		return err
 	}
@@ -165,7 +171,6 @@ func ExecuteOrder(db *sqlx.DB, orderID string) error {
 			tx.Rollback()
 			return err
 		}
-
 		/*if !sufficientFunds {
 			tx.Rollback()
 			return errors.New("insufficient funds to execute buy order")

@@ -21,4 +21,5 @@ type Instrument struct {
 	AssetTypeID    uuid.UUID `db:"asset_type_id" json:"asset_type_id"`
 	CreatedAt      time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt      time.Time `db:"updated_at" json:"updated_at"`
+	UnifiedAssetID uuid.UUID `db:"unified_asset_id" json:"unified_asset_id"`
 }

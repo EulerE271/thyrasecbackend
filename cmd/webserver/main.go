@@ -3,15 +3,11 @@ package main
 import (
 	"log"
 	"os"
-	accounthandler "thyra/internal/accounts/api/accounts"
-	accountrepository "thyra/internal/accounts/repositories"
-	accountroutes "thyra/internal/accounts/routes"
-	accountservice "thyra/internal/accounts/services"
-	assetroutes "thyra/internal/assets/routes"
 	"thyra/internal/common/db"
-	middle "thyra/internal/common/middleware"
+	helpers "thyra/internal/common/middleware"
+	"thyra/internal/common/utils"
+	orderroutes "thyra/internal/orders/routes"
 	transactionroutes "thyra/internal/transactions/routes"
-	"thyra/internal/users/routes"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -74,27 +70,21 @@ func main() {
 
 	v1 := r.Group("/v1")
 
-	//repo := positionrepository.NewHoldingsRepository(db.GetDB())
-	//service := positionservice.NewHoldingsService(repo)
-	//holdingsHandler := positionshandler.NewHoldingsHandler(service) */
+	dbConn := db.GetDB()
+	dbxConn := db.GetDB() // Assuming you have a function to get sqlx DB connection
 
-	accountValueRepo := accountrepository.NewAccountBalanceRepository(db.GetDB().DB)    // If renamed
-	accountValueService := accountservice.NewAccountBalanceService(accountValueRepo)    // If renamed
-	accountValueHandler := accounthandler.NewAccountBalanceHandler(accountValueService) // If renamed
+	utils.InitializeUsersModule(dbxConn, v1)
+	v1.Use(helpers.DBContext(), helpers.TokenMiddleware)
 
-	//accountPerformanceRepo := accountperformancerepository.NewAccountPerformanceRepository(db.GetDB().DB)
-	//accountPerformanceService := accountperformanceservice.NewAccountPerformanceService(accountPerformanceRepo)
-	//accountPerformanceHandler := accountperformancehandler.NewAccountPerformanceHandler(accountPerformanceService)
+	// Initialize modules
+	utils.InitializeAccountModule(dbxConn, dbConn.DB, v1)
+	utils.InitializeAssetModule(dbxConn, v1)
+	utils.InitializeAnalyticsModule(dbConn.DB, v1)
+	utils.InitializePositionsModule(dbxConn, v1)
 
-	// Setup routes
-	routes.SetupRoutes(r)
-	v1.Use(middle.DBContext())
-	v1.Use(middle.TokenMiddleware)
-	// Setup module-specific routes
-	transactionroutes.SetupRoutes(v1) // Setup rout
-	accountroutes.SetupRoutes(v1, accountValueHandler)
-	assetroutes.SetupRoutes(v1)
-
+	// Setup routes for other modules if needed
+	transactionroutes.SetupRoutes(v1)
+	orderroutes.SetupRoutes(v1)
 	// Set up your routes by calling the SetupRoutes function from the "routes" package
 
 	// Start the server

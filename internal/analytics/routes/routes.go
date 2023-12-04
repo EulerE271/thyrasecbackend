@@ -1,12 +1,12 @@
 package routes
 
 import (
-	handlers "thyra/internal/accounts/api/accounts" // Import the handlers package
+	handlers "thyra/internal/analytics/api/performance" // Import the handlers package
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(router *gin.RouterGroup, accountValueHandler *handlers.AccountBalanceHandler) {
+func SetupRoutes(router *gin.RouterGroup, accountPerformanceHandler *handlers.AccountPerformanceHandler) {
 	//router.GET("/account/:accountId/performance-change", accountPerformanceHandler.GetAccountPerformanceChange)
 	//router.GET("/user/:userId/performance-change", accountPerformanceHandler.GetUserPerformanceChange)
 }

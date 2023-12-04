@@ -12,10 +12,20 @@ import (
 	assetroutes "thyra/internal/assets/routes"
 	assetservice "thyra/internal/assets/services"
 
-	analyticsrepo "thyra/internal/analytics/repositories"
+	analyticshandler "thyra/internal/analytics/api/performance"
+	analyticsrepo "thyra/internal/analytics/repositories/performance"
 	analyticsroutes "thyra/internal/analytics/routes"
-	analyticsservice "thyra/internal/anayltics/service"
-	analyticshandler "thyra/internal/anyltics/api"
+	analyticsservice "thyra/internal/analytics/services/performance"
+
+	positionshandlers "thyra/internal/positions/api"
+	positionsrepo "thyra/internal/positions/repositories"
+	positionsroutes "thyra/internal/positions/routes"
+	positionsservices "thyra/internal/positions/services"
+
+	userhandlers "thyra/internal/users/api/users"
+	userrepo "thyra/internal/users/repositories"
+	usersroutes "thyra/internal/users/routes"
+	userservices "thyra/internal/users/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -51,9 +61,9 @@ func InitializeAssetModule(dbx *sqlx.DB, router *gin.RouterGroup) {
 	assetroutes.SetupRoutes(router, assetHandler)
 }
 
-func InitializeAnalyticsModule(dbx *sqlx.DB, router *gin.RouterGroup) {
+func InitializeAnalyticsModule(db *sql.DB, router *gin.RouterGroup) {
 	// Initialize repositories
-	accountPerformanceRepo := analyticsrepo.NewAccountPerformanceRepository(dbx)
+	accountPerformanceRepo := analyticsrepo.NewAccountPerformanceRepository(db)
 
 	// Initialize services
 	accountPerformanceService := analyticsservice.NewAccountPerformanceService(accountPerformanceRepo)
@@ -63,4 +73,33 @@ func InitializeAnalyticsModule(dbx *sqlx.DB, router *gin.RouterGroup) {
 
 	// Setup routes specific to the Analytics module
 	analyticsroutes.SetupRoutes(router, accountPerformanceHandler)
+}
+
+func InitializePositionsModule(dbx *sqlx.DB, router *gin.RouterGroup) {
+	// Initialize repositories
+	holdingRepo := positionsrepo.NewHoldingsRepository(dbx)
+
+	// Initialize services
+	holdingService := positionsservices.NewHoldingsService(holdingRepo)
+
+	// Initialize handlers
+	holdingHandler := positionshandlers.NewHoldingsHandler(holdingService)
+
+	// Setup routes specific to the Positions module
+	positionsroutes.SetupRoutes(router, holdingHandler)
+}
+
+func InitializeUsersModule(dbx *sqlx.DB, router *gin.RouterGroup) {
+	// Initialize repositories
+	userRepo := userrepo.NewUserRepository(dbx)
+	// Initialize services
+	userService := userservices.NewUserService(userRepo)
+	// Initialize handlers
+	userHandler := userhandlers.NewUserHandler(userService)
+
+	authRepo := userrepo.NewAuthRepository(dbx)
+	authService := userservices.NewAuthService(authRepo)
+	authHandler := userhandlers.NewAuthHandler(authService)
+	// Setup routes specific to the Users module
+	usersroutes.SetupRoutes(router, userHandler, authHandler)
 }
