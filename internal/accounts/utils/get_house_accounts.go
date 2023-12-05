@@ -5,23 +5,14 @@ import (
 	"database/sql" // Import the standard sql package for sql.ErrNoRows
 	"fmt"
 	"log"
-	"thyra/internal/common/db" // Import your custom db package
 
-	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
-func GetHouseAccount(c *gin.Context) (string, error) {
-	// Use GetDB to get the initialized database connection
-	database := db.GetDB()
-	if database == nil {
+func GetHouseAccount(db *sqlx.DB) (string, error) {
+	if db == nil {
 		return "", fmt.Errorf("database connection is not initialized")
-	}
-
-	// Extract context from gin.Context, use context.Background() as fallback
-	ctx := c.Request.Context()
-	if ctx == nil {
-		ctx = context.Background()
 	}
 
 	// Struct to hold query result
@@ -31,7 +22,7 @@ func GetHouseAccount(c *gin.Context) (string, error) {
 
 	// Query to get the ID of the house account type
 	accountTypeQuery := `SELECT id FROM thyrasec.account_types WHERE account_type_name = 'House'`
-	err := database.GetContext(ctx, &result, accountTypeQuery) // Use 'database', not 'db'
+	err := db.GetContext(context.Background(), &result, accountTypeQuery)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			log.Printf("House account type not found")
@@ -44,7 +35,7 @@ func GetHouseAccount(c *gin.Context) (string, error) {
 	// Query to get the house account using the account type ID
 	var houseAccountID string
 	accountQuery := `SELECT id FROM thyrasec.accounts WHERE account_type = $1`
-	err = database.GetContext(ctx, &houseAccountID, accountQuery, result.HouseAccountTypeID) // Use 'database', not 'db'
+	err = db.GetContext(context.Background(), &houseAccountID, accountQuery, result.HouseAccountTypeID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			log.Printf("No house account found")

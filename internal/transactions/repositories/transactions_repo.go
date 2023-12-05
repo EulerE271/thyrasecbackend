@@ -16,10 +16,10 @@ type TransactionRepository interface {
 }
 
 type transactionRepository struct {
-	db *sqlx.DB
+	db *sqlx.Tx
 }
 
-func NewTransactionRepository(db *sqlx.DB) TransactionRepository {
+func NewTransactionRepository(db *sqlx.Tx) TransactionRepository {
 	return &transactionRepository{db: db}
 }
 

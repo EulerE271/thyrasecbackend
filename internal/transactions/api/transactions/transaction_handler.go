@@ -47,7 +47,7 @@ func CreateDeposit(c *gin.Context) {
 	}
 
 	// Create a new repository and service instance
-	repo := repositories.NewTransactionRepository(database)
+	repo := repositories.NewTransactionRepository(&sqlx.Tx{})
 	service := services.NewTransactionService(repo)
 
 	// Use the service to create the deposit
@@ -61,6 +61,7 @@ func CreateDeposit(c *gin.Context) {
 }
 
 func CreateWithdrawal(c *gin.Context) {
+
 	// Extract user ID from the context
 	userIDInterface, exists := c.Get("userID")
 	if !exists {
@@ -82,8 +83,8 @@ func CreateWithdrawal(c *gin.Context) {
 	}
 
 	// Create a new service instance
-	database := db.GetConnection(c)
-	repo := repositories.NewTransactionRepository(database)
+	//tx := db.GetConnection(c)
+	repo := repositories.NewTransactionRepository(&sqlx.Tx{})
 	service := services.NewTransactionService(repo)
 
 	// Use the service to create the withdrawal

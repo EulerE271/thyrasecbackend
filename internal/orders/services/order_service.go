@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	accountutils "thyra/internal/accounts/utils"
 	"thyra/internal/orders/models"
 	"thyra/internal/orders/repositories"
+	"thyra/internal/orders/utils"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,10 +15,19 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+type OrdersService struct {
+	db   *sqlx.DB
+	repo *repositories.OrdersRepository
+}
+
+func NewOrdersService(db *sqlx.DB, repo *repositories.OrdersRepository) *OrdersService {
+	return &OrdersService{db: db, repo: repo}
+}
+
 /* Checks and reserves cash when buying an instrument */
-func CheckAndReserveCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
+func (s *OrdersService) CheckAndReserveCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
 	// Check if there is sufficient available cash
-	sufficientCash, err := repositories.CheckAvailableCash(tx, accountID, amount)
+	sufficientCash, err := s.repo.CheckAvailableCash(tx, accountID, amount)
 	if err != nil {
 		return err
 	}
@@ -25,7 +36,7 @@ func CheckAndReserveCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decima
 	}
 
 	// Reserve the cash
-	err = repositories.ReserveCash(tx, accountID, amount)
+	err = s.repo.ReserveCash(tx, accountID, amount)
 	if err != nil {
 		return err
 	}
@@ -34,14 +45,14 @@ func CheckAndReserveCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decima
 }
 
 /*Creates a reservation and updates the holding table when selling an asset */
-func CreateReservationAndDeductHoldings(db *sqlx.DB, order models.Order) error {
+func (s *OrdersService) CreateReservationAndDeductHoldings(db *sqlx.DB, order models.Order) error {
 	tx, err := db.Beginx()
 	if err != nil {
 		return err
 	}
 
 	// Check available holdings
-	availableQuantity, err := repositories.CheckHoldings(tx, order.AccountID, order.AssetID)
+	availableQuantity, err := s.repo.CheckHoldings(tx, order.AccountID, order.AssetID)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -54,13 +65,14 @@ func CreateReservationAndDeductHoldings(db *sqlx.DB, order models.Order) error {
 
 	// Create reservation (assuming reserved duration is provided)
 	reservedUntil := time.Now().Add(1000 * time.Hour)
-	if err := repositories.InsertReservation(tx, order, reservedUntil); err != nil {
+	if err := s.repo.InsertReservation(tx, order, reservedUntil); err != nil {
 		tx.Rollback()
 		return err
 	}
 
 	// Deduct from holdings
-	if err := repositories.DeductHoldings(tx, order.AccountID, order.AssetID, int(order.Quantity)); err != nil {
+	if err := s.repo.DeductHolding(tx, order.AccountID, order.AssetID, order.Quantity); err != nil {
+		fmt.Printf("Error in deduct holding: %v", err)
 		tx.Rollback()
 		return err
 	}
@@ -68,14 +80,14 @@ func CreateReservationAndDeductHoldings(db *sqlx.DB, order models.Order) error {
 	return tx.Commit()
 }
 
-func ConfirmOrder(db *sqlx.DB, orderID string) error {
+func (s *OrdersService) ConfirmOrder(db *sqlx.DB, orderID string) error {
 	tx, err := db.Beginx()
 	if err != nil {
 		return err
 	}
 
 	// Retrieve the order to confirm
-	order, err := repositories.GetOrder(db, orderID)
+	order, err := s.repo.GetOrder(tx, orderID)
 	if err != nil {
 		log.Fatalf("error in order: %v", err)
 		tx.Rollback()
@@ -88,7 +100,7 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 		return errors.New("order cannot be confirmed in its current state")
 	}
 	fmt.Printf("ordertype: %v", order.OrderType)
-	orderTypeName, err := repositories.GetOrderType(tx, order.OrderType)
+	orderTypeName, err := s.repo.GetOrderType(tx, order.OrderType)
 	if err != nil {
 		log.Fatalf("error in orderTypename: %v", err)
 		tx.Rollback()
@@ -98,7 +110,7 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 	// Perform actions specific to confirming the order
 	if orderTypeName == "order_type_buy" {
 		totalAmountDecimal := decimal.NewFromFloat(order.TotalAmount)
-		_, err := repositories.CheckAvailableCash(tx, order.AccountID, totalAmountDecimal)
+		_, err := s.repo.CheckAvailableCash(tx, order.AccountID, totalAmountDecimal)
 		if err != nil {
 			log.Fatalf("error in checkAvailableCash: %v", err)
 			tx.Rollback()
@@ -111,8 +123,9 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 		} */
 	} else if orderTypeName == "order_type_sell" {
 		// Logic to reserve assets for a sell order
-		availableQuantity, err := repositories.CheckHoldings(tx, order.AccountID, order.AssetID)
+		availableQuantity, err := s.repo.CheckHoldings(tx, order.AccountID, order.AssetID)
 		if err != nil {
+			fmt.Printf("error in check holdings: %v", err)
 			tx.Rollback()
 			return err
 		}
@@ -120,17 +133,13 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 			tx.Rollback()
 			return errors.New("insufficient holdings for sell order")
 		}
-		if err := CreateReservationAndDeductHoldings(db, *order); err != nil {
-			tx.Rollback()
-			return err
-		}
 	} else {
 		tx.Rollback()
 		return errors.New("unknown order type")
 	}
 
 	// Update order status to confirmed
-	if err := repositories.UpdateOrderStatus(tx, orderID, models.StatusConfirmed); err != nil {
+	if err := s.repo.UpdateOrderStatus(tx, orderID, models.StatusConfirmed); err != nil {
 		log.Fatalf("error in updateorderstatus: %v", err)
 		tx.Rollback()
 		return err
@@ -139,14 +148,14 @@ func ConfirmOrder(db *sqlx.DB, orderID string) error {
 	return tx.Commit()
 }
 
-func ExecuteOrder(db *sqlx.DB, orderID string) error {
+func (s *OrdersService) ExecuteOrder(db *sqlx.DB, orderID string) error {
 	tx, err := db.Beginx()
 	if err != nil {
 		return err
 	}
 
 	// Retrieve the order to confirm
-	order, err := repositories.GetOrder(db, orderID)
+	order, err := s.repo.GetOrder(tx, orderID)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -158,7 +167,7 @@ func ExecuteOrder(db *sqlx.DB, orderID string) error {
 		return errors.New("order cannot be executed in its current state")
 	}
 
-	orderTypeName, err := repositories.GetOrderType(tx, order.OrderType)
+	orderTypeName, err := s.repo.GetOrderType(tx, order.OrderType)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -166,7 +175,7 @@ func ExecuteOrder(db *sqlx.DB, orderID string) error {
 
 	if orderTypeName == "order_type_buy" {
 		totalAmountDecimal := decimal.NewFromFloat(order.TotalAmount)
-		_, err := repositories.CheckAvailableCash(tx, order.AccountID, totalAmountDecimal)
+		_, err := s.repo.CheckAvailableCash(tx, order.AccountID, totalAmountDecimal)
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -177,7 +186,7 @@ func ExecuteOrder(db *sqlx.DB, orderID string) error {
 		} */
 	} else if orderTypeName == "order_type_sell" {
 		// Logic to reserve assets for a sell order
-		availableQuantity, err := repositories.CheckHoldings(tx, order.AccountID, order.AssetID)
+		availableQuantity, err := s.repo.CheckHoldings(tx, order.AccountID, order.AssetID)
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -186,20 +195,102 @@ func ExecuteOrder(db *sqlx.DB, orderID string) error {
 			tx.Rollback()
 			return errors.New("insufficient holdings for sell order")
 		}
-		if err := CreateReservationAndDeductHoldings(db, *order); err != nil {
-			tx.Rollback()
-			return err
-		}
 	} else {
 		tx.Rollback()
 		return errors.New("unknown order type")
 	}
 
 	// Update order status to confirmed
-	if err := repositories.UpdateOrderStatus(tx, orderID, models.StatusExecuted); err != nil {
+	if err := s.repo.UpdateOrderStatus(tx, orderID, models.StatusExecuted); err != nil {
 		tx.Rollback()
 		return err
 	}
 
 	return tx.Commit()
+}
+
+func (s *OrdersService) GetAllOrders() ([]models.OrderWithDetails, error) {
+	return s.repo.GetAllOrders()
+}
+
+func (s *OrdersService) CreateBuyOrder(newOrder models.Order) (models.Order, error) {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return models.Order{}, err
+	}
+
+	// Set unique identifiers and status for the new order
+	newOrder.ID = uuid.New()
+	newOrder.OrderNumber = utils.GenerateOrderNumber()
+	newOrder.Status = models.StatusCreated
+
+	// Insert the order into the database using the repository
+	if err := s.repo.InsertOrder(tx, newOrder); err != nil {
+		tx.Rollback()
+		return models.Order{}, err
+	}
+
+	// Example business logic for handling cash reservations
+	totalAmountDecimal := decimal.NewFromFloat(newOrder.TotalAmount)
+	if err := s.CheckAndReserveCash(tx, newOrder.AccountID, totalAmountDecimal); err != nil {
+		tx.Rollback()
+		return models.Order{}, err
+	}
+
+	houseAccount, err := accountutils.GetHouseAccount(s.db) // Ensure this returns the house account ID
+	if err != nil {
+		tx.Rollback()
+		log.Fatalf("error fetching house account: %v", err)
+		return models.Order{}, err
+	}
+	houseAccountUUID := uuid.MustParse(houseAccount)
+
+	if err := s.CheckAndReserveCash(tx, houseAccountUUID, totalAmountDecimal); err != nil {
+		tx.Rollback()
+		return models.Order{}, err
+	}
+
+	// Insert cash reservation for the order
+	reservedUntil := time.Now().Add(24 * time.Hour)
+	if err := s.repo.InsertCashReservation(tx, newOrder, reservedUntil); err != nil {
+		tx.Rollback()
+		return models.Order{}, err
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		return models.Order{}, err
+	}
+
+	return newOrder, nil
+}
+
+func (s *OrdersService) CreateSellOrder(newOrder models.Order) (models.Order, error) {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return models.Order{}, err
+	}
+
+	newOrder.ID = uuid.New()
+	newOrder.Status = models.StatusCreated
+	newOrder.OrderNumber = utils.GenerateOrderNumber()
+
+	if err := s.repo.ReserveAsset(tx, newOrder.AccountID, newOrder.Quantity, newOrder.AssetID); err != nil {
+		log.Println("Error reserving asset:", err)
+		tx.Rollback()
+		return models.Order{}, err
+	}
+
+	if err := s.repo.InsertOrder(tx, newOrder); err != nil {
+		log.Println("Error reserving asset:", err)
+		tx.Rollback()
+		return models.Order{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return models.Order{}, err
+	}
+
+	return newOrder, nil
+
 }

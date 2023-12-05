@@ -130,7 +130,6 @@ func CreateBuyOrderHandler(c *gin.Context) {
 
 	// Insert cash reservation for the order
 	reservedUntil := time.Now().Add(24 * time.Hour)
-	fmt.Printf("inserting into cash reservations:")
 	if err := repositories.InsertCashReservation(tx, newOrder, reservedUntil); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create cash reservation", "details": err.Error()})
@@ -150,34 +149,72 @@ func CreateBuyOrderHandler(c *gin.Context) {
 func CreateSellOrderHandler(c *gin.Context) {
 	var newOrder models.Order
 
+	// Parse the request body into the newOrder struct.
 	if err := c.ShouldBindJSON(&newOrder); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
 		return
 	}
 
+	//totalAmountDecimal := decimal.NewFromFloat(newOrder.TotalAmount)
+	orderNumber := utils.GenerateOrderNumber()
+	newOrder.OrderNumber = orderNumber
+	// Generate a new UUID for the order.
 	newOrder.ID = uuid.New()
 	newOrder.Status = models.StatusCreated
+	newOrder.OrderNumber = utils.GenerateOrderNumber()
 
+	/*houseAccount, err := accountutils.GetHouseAccount(c)
+	if err != nil {
+		log.Fatalf("error fetching house account: %v", err)
+	}*/
+	//houseAccountUUID := uuid.MustParse(houseAccount)
+
+	// Get a database connection.
 	dbConn := db.GetConnection(c)
 	if dbConn == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection issue"})
 		return
 	}
 
-	stmt := `INSERT INTO thyrasec.orders (id, account_id, asset_id, order_type, quantity, price_per_unit, total_amount, status, created_at, updated_at) 
-              VALUES (:id, :account_id, :asset_id, :order_type, :quantity, :price_per_unit, :total_amount, :status, NOW(), NOW())`
-
-	_, err := dbConn.NamedExec(stmt, newOrder)
+	// Start a database transaction.
+	tx, err := dbConn.Beginx()
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction", "details": err.Error()})
+		return
+	}
+
+	if err := repositories.ReserveAsset(tx, newOrder.AccountID, newOrder.Quantity, newOrder.AssetID); err != nil {
+		log.Println("Error reserving asset:", err)
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instrument reservation", "details": err.Error()})
+		return
+	}
+
+	// Insert the order into the database.
+	stmt := `INSERT INTO thyrasec.orders (id, account_id, asset_id, order_type, quantity, price_per_unit, total_amount, status, created_at, updated_at, trade_date, settlement_date, owner_id, comment, order_number) 
+              VALUES (:id, :account_id, :asset_id, :order_type, :quantity, :price_per_unit, :total_amount, :status, NOW(), NOW(), :trade_date, :settlement_date, :owner_id, :comment, :order_number)`
+	_, err = tx.NamedExec(stmt, newOrder)
+	if err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order", "details": err.Error()})
 		return
 	}
 
-	if err := services.CreateReservationAndDeductHoldings(dbConn, newOrder); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process sell order", "details": err.Error()})
+	// Insert cash reservation for the order
+	reservedUntil := time.Now().Add(24 * time.Hour)
+	fmt.Printf("inserting into cash reservations:")
+	if err := repositories.InsertReservation(tx, newOrder, reservedUntil); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instrument reservation", "details": err.Error()})
 		return
 	}
 
+	// Commit the transaction.
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction", "details": err.Error()})
+		return
+	}
+	// Respond with the created order.
 	c.JSON(http.StatusCreated, newOrder)
 }
 
@@ -188,7 +225,7 @@ func ConfirmOrderHandler(c *gin.Context) {
 	sqlxDB, _ := db.(*sqlx.DB)
 
 	// Check if the order exists and is in a state that can be confirmed
-	order, err := repositories.GetOrder(sqlxDB, orderID)
+	order, err := repositories.GetOrder(tx, orderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
 		return
@@ -243,7 +280,7 @@ type SettlementRequest struct {
 	SettlementDate  *time.Time `json:"settlementDate"`
 }
 
-func SettlementHandler(c *gin.Context) {
+func SettlementBuyHandler(c *gin.Context) {
 
 	userIDInterface, exists := c.Get("userID")
 	if !exists {

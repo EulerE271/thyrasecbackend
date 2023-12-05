@@ -72,36 +72,18 @@ func ReserveCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal) error
 	return err
 }
 
-/* Deducts the holding when selling an asset */
-func DeductHoldings(tx *sqlx.Tx, accountID, assetID uuid.UUID, quantity int) error {
-	updateQuery := `UPDATE thyrasec.holdings 
-                    SET quantity = quantity - :quantity 
-                    WHERE account_id = :account_id AND asset_id = :asset_id AND quantity >= :quantity`
+func ReserveAsset(tx *sqlx.Tx, accountID uuid.UUID, amount float64, assetID uuid.UUID) error {
+	updateQuery := `
+	UPDATE thyrasec.holdings 
+	SET available_quantity = available_quantity - $1
+	WHERE account_id = $2 AND asset_id = $3 AND available_quantity >= $1
+`
 
-	params := map[string]interface{}{
-		"quantity":   quantity,
-		"account_id": accountID,
-		"asset_id":   assetID,
-	}
-
-	result, err := tx.NamedExec(updateQuery, params)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
-		return errors.New("no holdings updated, possibly due to insufficient quantity")
-	}
-
-	return nil
+	_, err := tx.Exec(updateQuery, float64(amount), accountID, assetID)
+	return err
 }
 
-func GetOrder(db *sqlx.DB, orderID string) (*models.Order, error) {
+func GetOrder(db *sqlx.Tx, orderID string) (*models.Order, error) {
 	var order models.Order
 	query := "SELECT * FROM thyrasec.orders WHERE id = $1"
 	if err := db.Get(&order, query, orderID); err != nil {
@@ -220,18 +202,56 @@ func UpdateAccountBalance(db *sqlx.DB, accountID uuid.UUID, balanceChange float6
 }
 
 func InsertHolding(db *sqlx.DB, holding positionmodels.Holding) error {
-	query := `INSERT INTO thyrasec.holdings (id, account_id, asset_id, quantity)
-			  VALUES (:id, :account_id, :asset_id, :quantity)`
-
-	_, err := db.NamedExec(query, holding)
-	if err != nil {
+	// Check if the holding already exists for the given account and asset
+	existingHolding := positionmodels.Holding{}
+	err := db.Get(&existingHolding, "SELECT * FROM thyrasec.holdings WHERE account_id = $1 AND asset_id = $2", holding.AccountID, holding.AssetID)
+	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
 
-	return nil
+	if err == nil {
+		// Holding exists, update the quantity
+		newQuantity := existingHolding.Quantity + holding.Quantity
+		newAvailableQuantity := existingHolding.AvailableQuantity + holding.Quantity
+		_, err := db.Exec("UPDATE thyrasec.holdings SET quantity = $1 AND available_quantity = $2 WHERE id = $3", newQuantity, newAvailableQuantity, existingHolding.ID)
+		return err
+	}
+
+	// Holding doesn't exist, insert a new row
+	query := `INSERT INTO thyrasec.holdings (account_id, asset_id, quantity)
+		  VALUES (:account_id, :asset_id, :quantity, :available_quantity)`
+	_, err = db.NamedExec(query, holding)
+	return err
 }
 
-func UpdateOrder(db *sqlx.DB, orderID string, settledQuantity float64, settledAmount float64, status string, tradeDate *time.Time, settlementDate *time.Time, comment string) error {
+func DeductHolding(db *sqlx.Tx, accountID uuid.UUID, assetID uuid.UUID, quantity float64) error {
+	// Check if the holding exists for the given account and asset
+	existingHolding := positionmodels.Holding{}
+	err := db.Get(&existingHolding, "SELECT * FROM thyrasec.holdings WHERE account_id = $1 AND asset_id = $2", accountID, assetID)
+	if err != nil {
+		fmt.Printf("The query for fetching holding went wrong: %v", err)
+		return err
+	}
+
+	// Check if the quantity to deduct is greater than the existing quantity
+	if quantity > existingHolding.Quantity {
+		return errors.New("insufficient holdings to deduct")
+	}
+
+	// Deduct the quantity
+	newQuantity := existingHolding.Quantity - quantity
+	newAvalaibleQuantity := existingHolding.AvailableQuantity - quantity
+	// If the new quantity is zero, delete the holding row; otherwise, update the quantity
+	if newQuantity == 0 {
+		_, err = db.Exec("DELETE FROM thyrasec.holdings WHERE id = $1", existingHolding.ID)
+	} else {
+		_, err = db.Exec("UPDATE thyrasec.holdings SET quantity = $1, available_quantity = $2 WHERE id = $3", newQuantity, newAvalaibleQuantity, existingHolding.ID)
+	}
+
+	return err
+}
+
+func UpdateOrder(db *sqlx.Tx, orderID string, settledQuantity float64, settledAmount float64, status string, tradeDate *time.Time, settlementDate *time.Time, comment string) error {
 	query := `
         UPDATE thyrasec.orders
         SET settledQuantity = $1, settledAmount = $2, status = $3, trade_date = $4, settlement_date = $5, comment = $6, updated_at = NOW()
@@ -242,7 +262,7 @@ func UpdateOrder(db *sqlx.DB, orderID string, settledQuantity float64, settledAm
 	return err
 }
 
-func GetAssetType(db *sqlx.DB, assetId uuid.UUID) (uuid.UUID, error) {
+func GetAssetType(db *sqlx.Tx, assetId uuid.UUID) (uuid.UUID, error) {
 
 	var assetType uuid.UUID
 
@@ -263,7 +283,7 @@ func GetOrderTypeByName(db *sqlx.DB, name string) (uuid.UUID, error) {
 	return orderType, nil
 }
 
-func GetTransactionTypeByOrderTypeID(db *sqlx.DB, orderTypeID uuid.UUID) (uuid.UUID, error) {
+func GetTransactionTypeByOrderTypeID(db *sqlx.Tx, orderTypeID uuid.UUID) (uuid.UUID, error) {
 	var transactionType uuid.UUID
 	query := "SELECT transaction_type_id FROM thyrasec.order_types WHERE Id = $1"
 	if err := db.Get(&transactionType, query, orderTypeID); err != nil {

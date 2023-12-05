@@ -46,3 +46,11 @@ type OrderWithDetails struct {
 	InstrumentName string `db:"instrument_name" json:"instrument_name"`
 	InstrumentType string `db:"instrument_type" json:"instrument_type"`
 }
+
+type SettlementRequest struct {
+	SettledQuantity float64    `json:"quantity"`
+	SettledAmount   float64    `json:"amount"`
+	Comment         string     `json:"comment"`
+	TradeDate       *time.Time `json:"tradeDate"`
+	SettlementDate  *time.Time `json:"settlementDate"`
+}
