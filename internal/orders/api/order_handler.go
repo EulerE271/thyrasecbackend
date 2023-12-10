@@ -4,218 +4,87 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	accountutils "thyra/internal/accounts/utils"
 	"thyra/internal/common/db"
 	"thyra/internal/orders/models"
-	"thyra/internal/orders/repositories"
-	"thyra/internal/orders/services"
-	"thyra/internal/orders/utils"
-	orderutils "thyra/internal/orders/utils"
-	positionmodel "thyra/internal/positions/models"
-	transactionModels "thyra/internal/transactions/models"
-	transactionRepository "thyra/internal/transactions/repositories"
-	transactionServices "thyra/internal/transactions/services" // using alias
+	"thyra/internal/orders/services" // using alias
 	authutils "thyra/internal/users/utils"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	"github.com/shopspring/decimal"
 )
 
-func GetAllOrdersHandler(c *gin.Context) {
-	// Extract the authenticated user's ID and role from context.
-	_, authUserRole, isAuthenticated := authutils.GetAuthenticatedUser(c)
-	if !isAuthenticated {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated or role not found"})
-		return
-	}
-
-	// Ensure the authenticated user is authorized to fetch orders.
-	if authUserRole != "admin" && authUserRole != "order_manager" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Not authorized. Admin or Order Manager access required"})
-		return
-	}
-
-	// Database connection
-	db := db.GetConnection(c)
-	if db == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection issue"})
-		return
-	}
-
-	// Fetching all orders with related account and asset details from the database.
-	query := `
-	SELECT o.*, a.account_number, asst.instrument_name, asst.instrument_type 
-	FROM thyrasec.orders o
-	JOIN thyrasec.accounts a ON o.account_id = a.id
-	JOIN thyrasec.assets asst ON o.asset_id = asst.id
-	`
-	var orders []models.OrderWithDetails // Define a new struct that includes the additional fields
-	if err := db.Select(&orders, query); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve orders", "details": err.Error()})
-		return
-	}
-
-	// Handling empty orders list.
-	if len(orders) == 0 {
-		c.JSON(http.StatusNoContent, gin.H{"message": "No orders found"})
-		return
-	}
-
-	// Sending the response with the orders and their details.
-	c.JSON(http.StatusOK, orders)
+type OrderHandler struct {
+	service *services.OrdersService
 }
 
-/* Handler for creating buy order*/
-func CreateBuyOrderHandler(c *gin.Context) {
-	var newOrder models.Order
-
-	// Parse the request body into the newOrder struct.
-	if err := c.ShouldBindJSON(&newOrder); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
-		return
-	}
-
-	totalAmountDecimal := decimal.NewFromFloat(newOrder.TotalAmount)
-	orderNumber := utils.GenerateOrderNumber()
-	newOrder.OrderNumber = orderNumber
-	// Generate a new UUID for the order.
-	newOrder.ID = uuid.New()
-	newOrder.Status = models.StatusCreated
-	newOrder.OrderNumber = utils.GenerateOrderNumber()
-
-	houseAccount, err := accountutils.GetHouseAccount(c)
-	if err != nil {
-		log.Fatalf("error fetching house account: %v", err)
-	}
-	houseAccountUUID := uuid.MustParse(houseAccount)
-
-	// Get a database connection.
-	dbConn := db.GetConnection(c)
-	if dbConn == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection issue"})
-		return
-	}
-
-	// Start a database transaction.
-	tx, err := dbConn.Beginx()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction", "details": err.Error()})
-		return
-	}
-
-	// Insert the order into the database.
-	stmt := `INSERT INTO thyrasec.orders (id, account_id, asset_id, order_type, quantity, price_per_unit, total_amount, status, created_at, updated_at, trade_date, settlement_date, owner_id, comment, order_number) 
-              VALUES (:id, :account_id, :asset_id, :order_type, :quantity, :price_per_unit, :total_amount, :status, NOW(), NOW(), :trade_date, :settlement_date, :owner_id, :comment, :order_number)`
-	_, err = tx.NamedExec(stmt, newOrder)
-	if err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order", "details": err.Error()})
-		return
-	}
-
-	if err := services.CheckAndReserveCash(tx, newOrder.AccountID, totalAmountDecimal); err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reserve cash", "details": err.Error()})
-		return
-	}
-
-	if err := services.CheckAndReserveCash(tx, houseAccountUUID, totalAmountDecimal); err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reserve cash", "details": err.Error()})
-		return
-	}
-
-	// Insert cash reservation for the order
-	reservedUntil := time.Now().Add(24 * time.Hour)
-	if err := repositories.InsertCashReservation(tx, newOrder, reservedUntil); err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create cash reservation", "details": err.Error()})
-		return
-	}
-
-	// Commit the transaction.
-	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction", "details": err.Error()})
-		return
-	}
-	// Respond with the created order.
-	c.JSON(http.StatusCreated, newOrder)
+func NewOrderHandler(service *services.OrdersService) *OrderHandler {
+	return &OrderHandler{service: service}
 }
 
-/* Creates a sell order */
-func CreateSellOrderHandler(c *gin.Context) {
-	var newOrder models.Order
+func GetAllOrdersHandler(service *services.OrdersService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		_, authUserRole, isAuthenticated := authutils.GetAuthenticatedUser(c)
+		if !isAuthenticated {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated or role not found"})
+			return
+		}
 
-	// Parse the request body into the newOrder struct.
-	if err := c.ShouldBindJSON(&newOrder); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
-		return
+		if authUserRole != "admin" && authUserRole != "order_manager" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Not authorized. Admin or Order Manager access required"})
+			return
+		}
+
+		orders, err := service.GetAllOrders()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve orders", "details": err.Error()})
+			return
+		}
+
+		if len(orders) == 0 {
+			c.JSON(http.StatusNoContent, gin.H{"message": "No orders found"})
+			return
+		}
+
+		c.JSON(http.StatusOK, orders)
 	}
+}
 
-	//totalAmountDecimal := decimal.NewFromFloat(newOrder.TotalAmount)
-	orderNumber := utils.GenerateOrderNumber()
-	newOrder.OrderNumber = orderNumber
-	// Generate a new UUID for the order.
-	newOrder.ID = uuid.New()
-	newOrder.Status = models.StatusCreated
-	newOrder.OrderNumber = utils.GenerateOrderNumber()
+func CreateBuyOrderHandler(service services.OrdersService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var newOrder models.Order
+		if err := c.ShouldBindJSON(&newOrder); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+			return
+		}
 
-	/*houseAccount, err := accountutils.GetHouseAccount(c)
-	if err != nil {
-		log.Fatalf("error fetching house account: %v", err)
-	}*/
-	//houseAccountUUID := uuid.MustParse(houseAccount)
+		createdOrder, err := service.CreateBuyOrder(newOrder)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order", "details": err.Error()})
+			return
+		}
 
-	// Get a database connection.
-	dbConn := db.GetConnection(c)
-	if dbConn == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection issue"})
-		return
+		c.JSON(http.StatusCreated, createdOrder)
 	}
+}
 
-	// Start a database transaction.
-	tx, err := dbConn.Beginx()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction", "details": err.Error()})
-		return
-	}
+func CreateSellOrderHandler(service services.OrdersService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var newOrder models.Order
+		if err := c.ShouldBindJSON(&newOrder); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+			return
+		}
 
-	if err := repositories.ReserveAsset(tx, newOrder.AccountID, newOrder.Quantity, newOrder.AssetID); err != nil {
-		log.Println("Error reserving asset:", err)
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instrument reservation", "details": err.Error()})
-		return
-	}
+		createdOrder, err := service.CreateSellOrder(newOrder)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order", "details": err.Error()})
+			return
+		}
 
-	// Insert the order into the database.
-	stmt := `INSERT INTO thyrasec.orders (id, account_id, asset_id, order_type, quantity, price_per_unit, total_amount, status, created_at, updated_at, trade_date, settlement_date, owner_id, comment, order_number) 
-              VALUES (:id, :account_id, :asset_id, :order_type, :quantity, :price_per_unit, :total_amount, :status, NOW(), NOW(), :trade_date, :settlement_date, :owner_id, :comment, :order_number)`
-	_, err = tx.NamedExec(stmt, newOrder)
-	if err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order", "details": err.Error()})
-		return
+		c.JSON(http.StatusCreated, createdOrder)
 	}
-
-	// Insert cash reservation for the order
-	reservedUntil := time.Now().Add(24 * time.Hour)
-	fmt.Printf("inserting into cash reservations:")
-	if err := repositories.InsertReservation(tx, newOrder, reservedUntil); err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instrument reservation", "details": err.Error()})
-		return
-	}
-
-	// Commit the transaction.
-	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction", "details": err.Error()})
-		return
-	}
-	// Respond with the created order.
-	c.JSON(http.StatusCreated, newOrder)
 }
 
 func ConfirmOrderHandler(c *gin.Context) {
@@ -333,13 +202,13 @@ func SettlementBuyHandler(c *gin.Context) {
 		return
 	}
 
-	/*orderType := ""
+	/*orderType := "" */
 
 	if order.OrderType == "buy" {
 		orderType = "trt_shares_acquisition"
 	} else {
 		orderType = "trt_shares_sell"
-	} */
+	}
 
 	assetType, err := repositories.GetAssetType(sqlxDB, order.AssetID)
 	if err != nil {
@@ -426,13 +295,13 @@ func SettlementBuyHandler(c *gin.Context) {
 	}
 
 	// Update account balance
-	/*fmt.Println("order total amount: %v", order.TotalAmount)
+	/*fmt.Println("order total amount: %v", order.TotalAmount) */
 	fmt.Println("order accountID: %v", order.AccountID)
 	err = repositories.UpdateAccountBalance(sqlxDB, order.AccountID, order.TotalAmount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
 		return
-	} */
+	}
 
 	// Insert into holding
 	holding := positionmodel.Holding{

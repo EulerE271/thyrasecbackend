@@ -13,8 +13,16 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+type OrdersRepository struct {
+	db *sqlx.DB
+}
+
+func NewOrdersRepository(db *sqlx.DB) *OrdersRepository {
+	return &OrdersRepository{db: db}
+}
+
 /* Inserts a asset reservation when selling assets */
-func InsertReservation(tx *sqlx.Tx, order models.Order, reservedUntil time.Time) error {
+func (r *OrdersRepository) InsertReservation(tx *sqlx.Tx, order models.Order, reservedUntil time.Time) error {
 	reservation := struct {
 		OrderID       uuid.UUID `db:"order_id"`
 		AccountID     uuid.UUID `db:"account_id"`
@@ -39,7 +47,7 @@ func InsertReservation(tx *sqlx.Tx, order models.Order, reservedUntil time.Time)
 }
 
 /* inserts cash reservation when pruchasing assets */
-func InsertCashReservation(tx *sqlx.Tx, order models.Order, reservedUntil time.Time) error {
+/*func (r *OrdersRepository) InsertCashReservation(tx *sqlx.Tx, order models.Order, reservedUntil time.Time) error {
 	cashReservation := struct {
 		OrderID       uuid.UUID       `db:"order_id"`
 		AccountID     uuid.UUID       `db:"account_id"`
@@ -54,15 +62,15 @@ func InsertCashReservation(tx *sqlx.Tx, order models.Order, reservedUntil time.T
 		Status:        "reserved",
 	}
 
-	query := `INSERT INTO thyrasec.cash_reservations (order_id, account_id, amount, reserved_until, status, created_at, updated_at) 
+	query := `INSERT INTO thyrasec.cash_reservations (order_id, account_id, amount, reserved_until, status, created_at, updated_at)
               VALUES (:order_id, :account_id, :amount, :reserved_until, :status, NOW(), NOW())`
 
 	_, err := tx.NamedExec(query, cashReservation)
 	return err
-}
+}*/
 
 /*Updates the available_cash and reserved_cash column in accounts table */
-func ReserveCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
+func (r *OrdersRepository) ReserveCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal) error {
 	updateQuery := `UPDATE thyrasec.accounts SET 
                     available_cash = available_cash - $1, 
                     reserved_cash = reserved_cash + $1 
@@ -72,7 +80,7 @@ func ReserveCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal) error
 	return err
 }
 
-func ReserveAsset(tx *sqlx.Tx, accountID uuid.UUID, amount float64, assetID uuid.UUID) error {
+func (r *OrdersRepository) ReserveAsset(tx *sqlx.Tx, accountID uuid.UUID, amount float64, assetID uuid.UUID) error {
 	updateQuery := `
 	UPDATE thyrasec.holdings 
 	SET available_quantity = available_quantity - $1
@@ -83,7 +91,7 @@ func ReserveAsset(tx *sqlx.Tx, accountID uuid.UUID, amount float64, assetID uuid
 	return err
 }
 
-func GetOrder(db *sqlx.Tx, orderID string) (*models.Order, error) {
+func (r *OrdersRepository) GetOrder(db *sqlx.Tx, orderID string) (*models.Order, error) {
 	var order models.Order
 	query := "SELECT * FROM thyrasec.orders WHERE id = $1"
 	if err := db.Get(&order, query, orderID); err != nil {
@@ -92,7 +100,7 @@ func GetOrder(db *sqlx.Tx, orderID string) (*models.Order, error) {
 	return &order, nil
 }
 
-func GetOrderType(db *sqlx.Tx, id uuid.UUID) (string, error) {
+func (r *OrdersRepository) GetOrderType(db *sqlx.Tx, id uuid.UUID) (string, error) {
 
 	var orderTypeName string
 	query := "SELECT order_type_name FROM order_types WHERE id = $1"
@@ -103,14 +111,14 @@ func GetOrderType(db *sqlx.Tx, id uuid.UUID) (string, error) {
 	return orderTypeName, nil
 }
 
-func UpdateOrderStatus(tx *sqlx.Tx, orderID string, status models.OrderStatusType) error {
+func (r *OrdersRepository) UpdateOrderStatus(tx *sqlx.Tx, orderID string, status models.OrderStatusType) error {
 	query := "UPDATE thyrasec.orders SET status = $1 WHERE id = $2"
 	_, err := tx.Exec(query, status, orderID)
 	return err
 }
 
 /*Checks whether there is enough holdings to sell an asset */
-func CheckHoldings(tx *sqlx.Tx, accountID, assetID uuid.UUID) (int, error) {
+func (r *OrdersRepository) CheckHoldings(tx *sqlx.Tx, accountID, assetID uuid.UUID) (int, error) {
 	var currentQuantity int
 	query := `SELECT quantity FROM thyrasec.holdings WHERE account_id = $1 AND asset_id = $2`
 	err := tx.Get(&currentQuantity, query, accountID, assetID)
@@ -125,7 +133,7 @@ func CheckHoldings(tx *sqlx.Tx, accountID, assetID uuid.UUID) (int, error) {
 }
 
 /* Checks whether there is enoguht cash when buying an asset */
-func CheckAvailableCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal) (bool, error) {
+func (r *OrdersRepository) CheckAvailableCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal) (bool, error) {
 	var availableCash decimal.Decimal
 	query := `SELECT available_cash FROM thyrasec.accounts WHERE id = $1`
 	err := tx.Get(&availableCash, query, accountID)
@@ -135,7 +143,7 @@ func CheckAvailableCash(tx *sqlx.Tx, accountID uuid.UUID, amount decimal.Decimal
 	return availableCash.GreaterThanOrEqual(amount), nil
 }
 
-func ReleaseReservation(db *sqlx.DB, orderID string, houseAccount string) error {
+func (r *OrdersRepository) ReleaseReservation(db *sqlx.DB, orderID string, houseAccount string) error {
 	var accountID uuid.UUID
 	var amount decimal.Decimal
 
@@ -171,7 +179,7 @@ func ReleaseReservation(db *sqlx.DB, orderID string, houseAccount string) error 
 	return nil
 }
 
-func UpdateAccountBalance(db *sqlx.DB, accountID uuid.UUID, balanceChange float64) error {
+func (r *OrdersRepository) UpdateAccountBalance(db *sqlx.DB, accountID uuid.UUID, balanceChange float64) error {
 	// Start a transaction
 	tx, err := db.Beginx()
 	if err != nil {
@@ -201,7 +209,7 @@ func UpdateAccountBalance(db *sqlx.DB, accountID uuid.UUID, balanceChange float6
 	return nil
 }
 
-func InsertHolding(db *sqlx.DB, holding positionmodels.Holding) error {
+func (r *OrdersRepository) InsertHolding(db *sqlx.DB, holding positionmodels.Holding) error {
 	// Check if the holding already exists for the given account and asset
 	existingHolding := positionmodels.Holding{}
 	err := db.Get(&existingHolding, "SELECT * FROM thyrasec.holdings WHERE account_id = $1 AND asset_id = $2", holding.AccountID, holding.AssetID)
@@ -224,7 +232,7 @@ func InsertHolding(db *sqlx.DB, holding positionmodels.Holding) error {
 	return err
 }
 
-func DeductHolding(db *sqlx.Tx, accountID uuid.UUID, assetID uuid.UUID, quantity float64) error {
+func (r *OrdersRepository) DeductHolding(db *sqlx.Tx, accountID uuid.UUID, assetID uuid.UUID, quantity float64) error {
 	// Check if the holding exists for the given account and asset
 	existingHolding := positionmodels.Holding{}
 	err := db.Get(&existingHolding, "SELECT * FROM thyrasec.holdings WHERE account_id = $1 AND asset_id = $2", accountID, assetID)
@@ -251,7 +259,7 @@ func DeductHolding(db *sqlx.Tx, accountID uuid.UUID, assetID uuid.UUID, quantity
 	return err
 }
 
-func UpdateOrder(db *sqlx.Tx, orderID string, settledQuantity float64, settledAmount float64, status string, tradeDate *time.Time, settlementDate *time.Time, comment string) error {
+func (r *OrdersRepository) UpdateOrder(db *sqlx.Tx, orderID string, settledQuantity float64, settledAmount float64, status string, tradeDate *time.Time, settlementDate *time.Time, comment string) error {
 	query := `
         UPDATE thyrasec.orders
         SET settledQuantity = $1, settledAmount = $2, status = $3, trade_date = $4, settlement_date = $5, comment = $6, updated_at = NOW()
@@ -273,7 +281,7 @@ func GetAssetType(db *sqlx.Tx, assetId uuid.UUID) (uuid.UUID, error) {
 	return assetType, nil
 }
 
-func GetOrderTypeByName(db *sqlx.DB, name string) (uuid.UUID, error) {
+func (r *OrdersRepository) GetOrderTypeByName(db *sqlx.DB, name string) (uuid.UUID, error) {
 	var orderType uuid.UUID
 	query := "SELECT id FROM order_types WHERE order_type_name = $1"
 	if err := db.Get(&orderType, query, name); err != nil {
@@ -283,7 +291,7 @@ func GetOrderTypeByName(db *sqlx.DB, name string) (uuid.UUID, error) {
 	return orderType, nil
 }
 
-func GetTransactionTypeByOrderTypeID(db *sqlx.Tx, orderTypeID uuid.UUID) (uuid.UUID, error) {
+func (r *OrdersRepository) GetTransactionTypeByOrderTypeID(db *sqlx.Tx, orderTypeID uuid.UUID) (uuid.UUID, error) {
 	var transactionType uuid.UUID
 	query := "SELECT transaction_type_id FROM thyrasec.order_types WHERE Id = $1"
 	if err := db.Get(&transactionType, query, orderTypeID); err != nil {
@@ -291,4 +299,51 @@ func GetTransactionTypeByOrderTypeID(db *sqlx.Tx, orderTypeID uuid.UUID) (uuid.U
 	}
 
 	return transactionType, nil
+}
+
+func (r *OrdersRepository) GetAllOrders() ([]models.OrderWithDetails, error) {
+	query := `
+    SELECT o.*, a.account_number, asst.instrument_name, asst.instrument_type 
+    FROM thyrasec.orders o
+    JOIN thyrasec.accounts a ON o.account_id = a.id
+    JOIN thyrasec.assets asst ON o.asset_id = asst.id
+    `
+
+	var orders []models.OrderWithDetails
+	if err := r.db.Select(&orders, query); err != nil {
+		return nil, err
+	}
+
+	return orders, nil
+}
+
+func (r *OrdersRepository) InsertOrder(tx *sqlx.Tx, order models.Order) error {
+	const insertOrderQuery = `
+    INSERT INTO thyrasec.orders 
+    (id, account_id, asset_id, order_type, quantity, price_per_unit, total_amount, 
+     status, created_at, updated_at, trade_date, settlement_date, owner_id, comment, order_number) 
+    VALUES 
+    (:id, :account_id, :asset_id, :order_type, :quantity, :price_per_unit, :total_amount, 
+     :status, NOW(), NOW(), :trade_date, :settlement_date, :owner_id, :comment, :order_number)`
+
+	_, err := tx.NamedExec(insertOrderQuery, order)
+	return err
+}
+
+func (r *OrdersRepository) InsertCashReservation(tx *sqlx.Tx, order models.Order, reservedUntil time.Time) error {
+	const insertReservationQuery = `
+    INSERT INTO cash_reservations
+    (order_id, reserved_until, ...)  -- replace ... with other fields as needed
+    VALUES
+    (:order_id, :reserved_until, ...)`
+
+	// Prepare data for the reservation, including the order ID and reservedUntil
+	reservationData := map[string]interface{}{
+		"order_id":       order.ID,
+		"reserved_until": reservedUntil,
+		// Add other necessary data
+	}
+
+	_, err := tx.NamedExec(insertReservationQuery, reservationData)
+	return err
 }
