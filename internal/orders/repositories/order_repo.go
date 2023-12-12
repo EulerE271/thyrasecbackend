@@ -143,7 +143,7 @@ func (r *OrdersRepository) CheckAvailableCash(tx *sqlx.Tx, accountID uuid.UUID, 
 	return availableCash.GreaterThanOrEqual(amount), nil
 }
 
-func (r *OrdersRepository) ReleaseReservation(db *sqlx.DB, orderID string, houseAccount string) error {
+func (r *OrdersRepository) ReleaseReservation(tx *sqlx.Tx, orderID string, houseAccount string) error {
 	var accountID uuid.UUID
 	var amount decimal.Decimal
 
@@ -151,27 +151,27 @@ func (r *OrdersRepository) ReleaseReservation(db *sqlx.DB, orderID string, house
 	quantityQuery := `SELECT account_id, amount FROM thyrasec.cash_reservations WHERE order_id = $1`
 
 	// Execute the query and scan the results into the variables
-	err := db.QueryRow(quantityQuery, orderID).Scan(&accountID, &amount)
+	err := tx.QueryRow(quantityQuery, orderID).Scan(&accountID, &amount)
 	if err != nil {
 		return fmt.Errorf("failed to get reservation details: %w", err)
 	}
 
 	// Update account reserved cash
 	updateAccountQuery := `UPDATE thyrasec.accounts SET reserved_cash = reserved_cash - $1 WHERE id = $2`
-	_, err = db.Exec(updateAccountQuery, amount, accountID)
+	_, err = tx.Exec(updateAccountQuery, amount, accountID)
 	if err != nil {
 		return fmt.Errorf("failed to update account reserved cash: %w", err)
 	}
 
 	updateHouseQuery := `UPDATE thyrasec.accounts SET reserved_cash = reserved_cash - $1 WHERE id = $2`
-	_, err = db.Exec(updateHouseQuery, amount, houseAccount)
+	_, err = tx.Exec(updateHouseQuery, amount, houseAccount)
 	if err != nil {
 		return fmt.Errorf("failed to update account reserved cash: %w", err)
 	}
 
 	// Update reservation status
 	updateReservationQuery := `UPDATE thyrasec.cash_reservations SET status = 'inactive' WHERE order_id = $1`
-	_, err = db.Exec(updateReservationQuery, orderID)
+	_, err = tx.Exec(updateReservationQuery, orderID)
 	if err != nil {
 		return fmt.Errorf("failed to update reservation status: %w", err)
 	}
@@ -179,40 +179,26 @@ func (r *OrdersRepository) ReleaseReservation(db *sqlx.DB, orderID string, house
 	return nil
 }
 
-func (r *OrdersRepository) UpdateAccountBalance(db *sqlx.DB, accountID uuid.UUID, balanceChange float64) error {
-	// Start a transaction
-	tx, err := db.Beginx()
-	if err != nil {
-		return err
-	}
-
-	fmt.Sprintf("Updating inside function: %v, %w", accountID, balanceChange)
+func (r *OrdersRepository) UpdateAccountBalance(tx *sqlx.Tx, accountID uuid.UUID, balanceChange float64) error {
 	// Define the query to update the account
 	query := `UPDATE thyrasec.accounts
-	SET account_balance = account_balance - $1,
-		reserved_cash = reserved_cash - $1,
-		available_cash = available_cash - $1
-	WHERE id = $2`
+              SET account_balance = account_balance - $1,
+                  reserved_cash = reserved_cash - $1,
+                  available_cash = available_cash - $1
+              WHERE id = $2`
 
-	// Execute the query
-	_, err = tx.Exec(query, balanceChange, accountID)
-	if err != nil {
-		tx.Rollback() // Roll back the transaction on error
-		return err
-	}
-
-	// Commit the transaction
-	if err = tx.Commit(); err != nil {
+	// Execute the query using the transaction
+	if _, err := tx.Exec(query, balanceChange, accountID); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *OrdersRepository) InsertHolding(db *sqlx.DB, holding positionmodels.Holding) error {
+func (r *OrdersRepository) InsertHolding(tx *sqlx.Tx, holding positionmodels.Holding) error {
 	// Check if the holding already exists for the given account and asset
 	existingHolding := positionmodels.Holding{}
-	err := db.Get(&existingHolding, "SELECT * FROM thyrasec.holdings WHERE account_id = $1 AND asset_id = $2", holding.AccountID, holding.AssetID)
+	err := tx.Get(&existingHolding, "SELECT * FROM thyrasec.holdings WHERE account_id = $1 AND asset_id = $2", holding.AccountID, holding.AssetID)
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
@@ -221,14 +207,14 @@ func (r *OrdersRepository) InsertHolding(db *sqlx.DB, holding positionmodels.Hol
 		// Holding exists, update the quantity
 		newQuantity := existingHolding.Quantity + holding.Quantity
 		newAvailableQuantity := existingHolding.AvailableQuantity + holding.Quantity
-		_, err := db.Exec("UPDATE thyrasec.holdings SET quantity = $1 AND available_quantity = $2 WHERE id = $3", newQuantity, newAvailableQuantity, existingHolding.ID)
+		_, err := tx.Exec("UPDATE thyrasec.holdings SET quantity = $1 AND available_quantity = $2 WHERE id = $3", newQuantity, newAvailableQuantity, existingHolding.ID)
 		return err
 	}
 
 	// Holding doesn't exist, insert a new row
 	query := `INSERT INTO thyrasec.holdings (account_id, asset_id, quantity)
 		  VALUES (:account_id, :asset_id, :quantity, :available_quantity)`
-	_, err = db.NamedExec(query, holding)
+	_, err = tx.NamedExec(query, holding)
 	return err
 }
 
@@ -281,10 +267,10 @@ func (r *OrdersRepository) GetAssetType(db *sqlx.Tx, assetId uuid.UUID) (uuid.UU
 	return assetType, nil
 }
 
-func (r *OrdersRepository) GetOrderTypeByName(db *sqlx.DB, name string) (uuid.UUID, error) {
+func (r *OrdersRepository) GetOrderTypeByName(tx *sqlx.Tx, name string) (uuid.UUID, error) {
 	var orderType uuid.UUID
 	query := "SELECT id FROM order_types WHERE order_type_name = $1"
-	if err := db.Get(&orderType, query, name); err != nil {
+	if err := tx.Get(&orderType, query, name); err != nil {
 		return uuid.Nil, err
 	}
 

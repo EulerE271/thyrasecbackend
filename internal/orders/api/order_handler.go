@@ -5,10 +5,10 @@ import (
 	"log"
 	"net/http"
 	accountutils "thyra/internal/accounts/utils"
-	"thyra/internal/common/db"
 	"thyra/internal/orders/models"
 	"thyra/internal/orders/services" // using alias
 	orderutils "thyra/internal/orders/utils"
+	positionmodel "thyra/internal/positions/models"
 	transactionmodels "thyra/internal/transactions/models"
 	transactionservice "thyra/internal/transactions/services"
 	authutils "thyra/internal/users/utils"
@@ -212,14 +212,6 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 			return
 		}
 
-		/*orderType := "" */
-
-		if order.OrderType == "buy" {
-			orderType = "trt_shares_acquisition"
-		} else {
-			orderType = "trt_shares_sell"
-		}
-
 		assetType, err := service.GetAssetType(order.AssetID)
 		if err != nil {
 			log.Fatalf("Error fetching assetType: %v", err)
@@ -269,7 +261,7 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 
 		clientInstrumentTransaction := clientCashTransaction
 
-		houseAccount, err := accountutils.GetHouseAccount(c)
+		houseAccount, err := accountutils.GetHouseAccount(sqlxDB)
 		if err != nil {
 			log.Fatalf("Error getting house account: %v", err)
 			return
@@ -291,14 +283,14 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 		}
 
 		fmt.Println(settlementRequest.SettledQuantity)
-		err = service.UpdateOrder(sqlxDB, orderID, settlementRequest.SettledQuantity, settlementRequest.SettledAmount, "settled", settlementRequest.TradeDate, settlementRequest.SettlementDate, settlementRequest.Comment)
+		err = service.UpdateOrder(orderID, settlementRequest.SettledQuantity, settlementRequest.SettledAmount, "settled", settlementRequest.TradeDate, settlementRequest.SettlementDate, settlementRequest.Comment)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order", "details": err.Error()})
 			return
 		}
 
 		// Release the reservation
-		err = s.repositories.ReleaseReservation(sqlxDB, orderID, houseAccount)
+		err = service.ReleaseReservation(orderID, houseAccount)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to release reservation", "details": err.Error()})
 			return
@@ -307,7 +299,7 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 		// Update account balance
 		/*fmt.Println("order total amount: %v", order.TotalAmount) */
 		fmt.Println("order accountID: %v", order.AccountID)
-		err = repositories.UpdateAccountBalance(sqlxDB, order.AccountID, order.TotalAmount)
+		err = service.UpdateAccountBalance(order.AccountID, order.TotalAmount)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
 			return
@@ -322,7 +314,7 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 			// Populate other fields as needed
 		}
 
-		err = repositories.InsertHolding(sqlxDB, holding)
+		err = service.InsertHolding(holding)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert into holding", "details": err.Error()})
 			return
@@ -333,42 +325,44 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 
 }
 
-func GetOrderTypeByName(c *gin.Context) {
-	db := db.GetDB() // Replace GetDB with your actual method to get the DB connection
+func GetOrderTypeByName(service services.OrdersService) gin.HandlerFunc {
+	return func(c *gin.Context) {
 
-	name := c.Query("name")
-	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Order type name is required"})
-		return
+		name := c.Query("name")
+		if name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Order type name is required"})
+			return
+		}
+
+		orderType, err := service.GetOrderTypeByName(name)
+		if err != nil {
+			// Handle errors, such as not finding the order type
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"order_type_id": orderType})
+
 	}
-
-	orderType, err := repositories.GetOrderTypeByName(db, name)
-	if err != nil {
-		// Handle errors, such as not finding the order type
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"order_type_id": orderType})
-
 }
 
-func GetOrderTypeByID(c *gin.Context) {
-	db.GetDB()
+func GetOrderTypeByID(service services.OrdersService) gin.HandlerFunc {
+	return func(c *gin.Context) {
 
-	id := c.Query("id")
-	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Order ID  is required"})
+		id := c.Query("id")
+		if id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Order ID  is required"})
+		}
+
+		UUID := uuid.MustParse(id)
+
+		orderType, err := service.GetOrderType(UUID)
+		if err != nil {
+			// Handle errors, such as not finding the order type
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"order_type_name": orderType})
 	}
-
-	UUID := uuid.MustParse(id)
-
-	orderType, err := repositories.GetOrderType(&sqlx.Tx{}, UUID)
-	if err != nil {
-		// Handle errors, such as not finding the order type
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"order_type_name": orderType})
 }

@@ -8,6 +8,7 @@ import (
 	"thyra/internal/orders/models"
 	"thyra/internal/orders/repositories"
 	"thyra/internal/orders/utils"
+	positionsmodel "thyra/internal/positions/models"
 	"time"
 
 	"github.com/google/uuid"
@@ -352,27 +353,173 @@ func (s *OrdersService) GetTransactionTypeByOrderTypeID(orderTypeID uuid.UUID) (
 	return transactionType, err
 }
 
-func (s *OrdersService) UpdateOrder(orderID string, settledQuantity float64, settledAmount float64, status string, tradeDate time.Time, settlementDate time.Time, comment string) error {
+func (s *OrdersService) UpdateOrder(orderID string, settledQuantity float64, settledAmount float64, status string, tradeDate *time.Time, settlementDate *time.Time, comment string) error {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return err
+	}
+	// Defer a rollback in case something fails. The rollback will be ignored if the commit is successful.
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p) // re-throw panic after Rollback
+		} else if err != nil {
+			tx.Rollback() // err is non-nil; don't change it
+		}
+	}()
+
+	if err = s.repo.UpdateOrder(tx, orderID, settledQuantity, settledAmount, status, tradeDate, settlementDate, comment); err != nil {
+		// Consider using a more robust logging mechanism here.
+		fmt.Println("something went wrong updating order:", err)
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *OrdersService) ReleaseReservation(orderID string, houseAccount string) error {
 
 	tx, err := s.db.Beginx()
 	if err != nil {
 		return err
 	}
 
-	if err := s.repo.UpdateOrder(tx, orderID, settledQuantity, settledAmount, status, &tradeDate, &settlementDate, comment); err != nil {
-		fmt.Println("something went wrong updating order")
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p) // re-throw panic after Rollback
+		} else if err != nil {
+			tx.Rollback() // err is non-nil; don't change it
+		}
+	}()
+
+	if err := s.repo.ReleaseReservation(tx, orderID, houseAccount); err != nil {
+		fmt.Println("Something went wrong releasing the reservation:", err)
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return err
 	}
 
-	return tx.Commit()
+	return nil
 }
 
-func (s *OrdersService) ReleaseReservation(orderID string, houseAccount string) error {
+func (s *OrdersService) UpdateAccountBalance(accountID uuid.UUID, balanceChange float64) error {
 
-	tx, err := 
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p) // re-throw panic after Rollback
+		} else if err != nil {
+			tx.Rollback() // err is non-nil; don't change it
+		}
+	}()
+
+	if err := s.repo.UpdateAccountBalance(tx, accountID, balanceChange); err != nil {
+		fmt.Println("Something went wrong releasing the reservation:", err)
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *OrdersService) InsertHolding(holding positionsmodel.Holding) error {
+
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p) // re-throw panic after Rollback
+		} else if err != nil {
+			tx.Rollback() // err is non-nil; don't change it
+		}
+	}()
+
+	if err := s.repo.InsertHolding(tx, holding); err != nil {
+		fmt.Println("Something went wrong releasing the reservation:", err)
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *OrdersService) GetOrderTypeByName(name string) (uuid.UUID, error) {
+
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	orderTypeID, err := s.repo.GetOrderTypeByName(tx, name)
+	if err != nil {
+		fmt.Println("Something went wrong fetching order type: ", err)
+		return uuid.Nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return uuid.Nil, err
+	}
+
+	return orderTypeID, err
+
+}
+
+func (s *OrdersService) GetOrderType(ID uuid.UUID) (string, error) {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return "", err
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	orderTypeName, err := s.repo.GetOrderType(tx, ID)
+	if err != nil {
+		fmt.Println("Something went wrong fetching order type: %v", err)
+		return "", err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return "", err
+	}
+
+	return orderTypeName, err
 
 }
