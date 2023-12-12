@@ -294,3 +294,85 @@ func (s *OrdersService) CreateSellOrder(newOrder models.Order) (models.Order, er
 	return newOrder, nil
 
 }
+
+func (s *OrdersService) GetOrder(orderID string) (models.Order, error) {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return models.Order{}, err
+	}
+
+	newOrder, err := s.repo.GetOrder(tx, orderID)
+	if err != nil {
+		fmt.Println("Something went wrong fetching orders")
+		return models.Order{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return models.Order{}, err
+	}
+
+	return *newOrder, nil
+}
+
+func (s *OrdersService) GetAssetType(assetID uuid.UUID) (uuid.UUID, error) {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	assetTypeID, err := s.repo.GetAssetType(tx, assetID)
+	if err != nil {
+		fmt.Println("Error fetching Asset Type")
+		return uuid.Nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return uuid.Nil, err
+	}
+
+	return assetTypeID, nil
+
+}
+
+func (s *OrdersService) GetTransactionTypeByOrderTypeID(orderTypeID uuid.UUID) (uuid.UUID, error) {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	transactionType, err := s.repo.GetTransactionTypeByOrderTypeID(tx, orderTypeID)
+	if err != nil {
+		fmt.Println("Something went wrong fetching transaction type")
+		return uuid.Nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return uuid.Nil, err
+	}
+
+	return transactionType, err
+}
+
+func (s *OrdersService) UpdateOrder(orderID string, settledQuantity float64, settledAmount float64, status string, tradeDate time.Time, settlementDate time.Time, comment string) error {
+
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return err
+	}
+
+	if err := s.repo.UpdateOrder(tx, orderID, settledQuantity, settledAmount, status, &tradeDate, &settlementDate, comment); err != nil {
+		fmt.Println("something went wrong updating order")
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *OrdersService) ReleaseReservation(orderID string, houseAccount string) error {
+
+	tx, err := 
+
+}

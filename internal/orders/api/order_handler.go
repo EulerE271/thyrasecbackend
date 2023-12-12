@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	accountutils "thyra/internal/accounts/utils"
 	"thyra/internal/common/db"
 	"thyra/internal/orders/models"
 	"thyra/internal/orders/services" // using alias
+	orderutils "thyra/internal/orders/utils"
+	transactionmodels "thyra/internal/transactions/models"
+	transactionservice "thyra/internal/transactions/services"
 	authutils "thyra/internal/users/utils"
 	"time"
 
@@ -19,7 +23,7 @@ type OrderHandler struct {
 	service *services.OrdersService
 }
 
-func NewOrderHandler(service *services.OrdersService) *OrderHandler {
+func NewOrderHandler(service *services.OrdersService, transactionservice *transactionservice.TransactionService) *OrderHandler {
 	return &OrderHandler{service: service}
 }
 
@@ -87,58 +91,63 @@ func CreateSellOrderHandler(service services.OrdersService) gin.HandlerFunc {
 	}
 }
 
-func ConfirmOrderHandler(c *gin.Context) {
-	orderID := c.Param("orderId")
+func ConfirmOrderHandler(service services.OrdersService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		orderID := c.Param("orderId")
 
-	db, _ := c.Get("db")
-	sqlxDB, _ := db.(*sqlx.DB)
+		db, _ := c.Get("db")
+		sqlxDB, _ := db.(*sqlx.DB)
 
-	// Check if the order exists and is in a state that can be confirmed
-	order, err := repositories.GetOrder(tx, orderID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
-		return
+		// Check if the order exists and is in a state that can be confirmed
+		order, err := service.GetOrder(orderID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
+			return
+		}
+
+		if order.Status != "created" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Order cannot be confirmed in its current state"})
+			return
+		}
+
+		// Perform specific actions for confirming an order
+		if err := service.ConfirmOrder(sqlxDB, orderID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm order", "details": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Order confirmed successfully"})
 	}
-
-	if order.Status != "created" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Order cannot be confirmed in its current state"})
-		return
-	}
-
-	// Perform specific actions for confirming an order
-	if err := services.ConfirmOrder(sqlxDB, orderID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm order", "details": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Order confirmed successfully"})
 }
 
-func ExecuteOrderHandler(c *gin.Context) {
-	orderID := c.Param("orderId")
+func ExecuteOrderHandler(service services.OrdersService) gin.HandlerFunc {
+	return func(c *gin.Context) {
 
-	db, _ := c.Get("db")
-	sqlxDB, _ := db.(*sqlx.DB)
+		orderID := c.Param("orderId")
 
-	// Check if the order exists and is in a state that can be executed
-	order, err := repositories.GetOrder(sqlxDB, orderID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
-		return
+		db, _ := c.Get("db")
+		sqlxDB, _ := db.(*sqlx.DB)
+
+		// Check if the order exists and is in a state that can be executed
+		order, err := service.GetOrder(orderID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
+			return
+		}
+
+		if order.Status != "confirmed" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Order cannot be executed in its current state"})
+			return
+		}
+
+		// Perform specific actions for executing an order
+		if err := service.ExecuteOrder(sqlxDB, orderID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to execute order", "details": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Order executed successfully"})
 	}
-
-	if order.Status != "confirmed" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Order cannot be executed in its current state"})
-		return
-	}
-
-	// Perform specific actions for executing an order
-	if err := services.ExecuteOrder(sqlxDB, orderID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to execute order", "details": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Order executed successfully"})
 }
 
 type SettlementRequest struct {
@@ -149,176 +158,179 @@ type SettlementRequest struct {
 	SettlementDate  *time.Time `json:"settlementDate"`
 }
 
-func SettlementBuyHandler(c *gin.Context) {
+func SettlementBuyHandler(service services.OrdersService, transactionservice transactionservice.TransactionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
 
-	userIDInterface, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusBadRequest, gin.H{"error userIdInterface": "UserID not found in context"})
-		return
+		userIDInterface, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusBadRequest, gin.H{"error userIdInterface": "UserID not found in context"})
+			return
+		}
+
+		userIDStr, ok := userIDInterface.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error userIDStr": "UserID is not a string"})
+			return
+		}
+
+		// Parse the userID string as UUID (only if needed later in the code)
+		userUUID, err := uuid.Parse(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "UserID is not a valid UUID", "details": err.Error()})
+			return
+		}
+
+		orderID := c.Param("orderId")
+
+		db, exists := c.Get("db")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection not found"})
+			return
+		}
+		sqlxDB, ok := db.(*sqlx.DB)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid database connection"})
+			return
+		}
+
+		// Get the order from the database
+		order, err := service.GetOrder(orderID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
+			return
+		}
+
+		// Ensure that the order is in the correct state
+		if order.Status != models.StatusExecuted {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Order cannot be settled in its current state"})
+			return
+		}
+
+		var settlementRequest SettlementRequest
+		if err := c.BindJSON(&settlementRequest); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
+			return
+		}
+
+		/*orderType := "" */
+
+		if order.OrderType == "buy" {
+			orderType = "trt_shares_acquisition"
+		} else {
+			orderType = "trt_shares_sell"
+		}
+
+		assetType, err := service.GetAssetType(order.AssetID)
+		if err != nil {
+			log.Fatalf("Error fetching assetType: %v", err)
+		}
+
+		/*fmt.Println(orderType)
+		/*transactionType, err := repositories.GetOrderType(sqlxDB, orderType)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong fetching orderType"})
+			return
+		} */
+
+		transactionType, err := service.GetTransactionTypeByOrderTypeID(order.OrderType)
+		if err != nil {
+			log.Fatalf("Error fetching transactionTyper: %v", err)
+		}
+		orderNumber := orderutils.GenerateOrderNumber()
+
+		/*transactionRepo := transactionRepository.NewTransactionRepository(sqlxDB)
+		transactionService := transactionServices.NewTransactionService(transactionRepo)*/
+
+		clientCashTransaction := transactionmodels.Transaction{
+
+			Id:                        uuid.New(),
+			Type:                      transactionType,
+			AssetId:                   order.AssetID,
+			CashAmount:                &settlementRequest.SettledAmount,
+			AssetQuantity:             &settlementRequest.SettledQuantity,
+			CashAccountId:             order.AccountID,
+			AssetAccountId:            order.AccountID,
+			AssetType:                 assetType,
+			TransactionCurrency:       order.Currency,
+			AssetPrice:                &order.PricePerUnit,
+			CreatedById:               userUUID,
+			UpdatedById:               userUUID,
+			CreatedAt:                 time.Now(),
+			UpdatedAt:                 time.Now(),
+			Corrected:                 false,
+			Canceled:                  false,
+			Comment:                   order.Comment,
+			TransactionOwnerId:        order.OwnerID,
+			TransactionOwnerAccountId: order.AccountID,
+			TradeDate:                 *settlementRequest.TradeDate,
+			SettlementDate:            *settlementRequest.SettlementDate,
+			OrderNumber:               orderNumber,
+		}
+
+		clientInstrumentTransaction := clientCashTransaction
+
+		houseAccount, err := accountutils.GetHouseAccount(c)
+		if err != nil {
+			log.Fatalf("Error getting house account: %v", err)
+			return
+		}
+
+		// Parse the houseAccount string into UUID
+		houseAccountUUID, err := uuid.Parse(houseAccount)
+		if err != nil {
+			log.Fatalf("Error parsing house account UUID: %v", err)
+			return
+		}
+
+		clientInstrumentTransaction.TransactionOwnerAccountId = houseAccountUUID
+
+		_, _, err = transactionservice.CreateInstrumentPurchaseTransaction(c, order.AccountID, userUUID.String(), &clientCashTransaction, &clientInstrumentTransaction)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create transaction", "details": err.Error()})
+			return
+		}
+
+		fmt.Println(settlementRequest.SettledQuantity)
+		err = service.UpdateOrder(sqlxDB, orderID, settlementRequest.SettledQuantity, settlementRequest.SettledAmount, "settled", settlementRequest.TradeDate, settlementRequest.SettlementDate, settlementRequest.Comment)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order", "details": err.Error()})
+			return
+		}
+
+		// Release the reservation
+		err = s.repositories.ReleaseReservation(sqlxDB, orderID, houseAccount)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to release reservation", "details": err.Error()})
+			return
+		}
+
+		// Update account balance
+		/*fmt.Println("order total amount: %v", order.TotalAmount) */
+		fmt.Println("order accountID: %v", order.AccountID)
+		err = repositories.UpdateAccountBalance(sqlxDB, order.AccountID, order.TotalAmount)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
+			return
+		}
+
+		// Insert into holding
+		holding := positionmodel.Holding{
+			ID:        uuid.New(),
+			AccountID: order.AccountID,
+			AssetID:   order.AssetID,
+			Quantity:  order.Quantity,
+			// Populate other fields as needed
+		}
+
+		err = repositories.InsertHolding(sqlxDB, holding)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert into holding", "details": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Order settled successfully"})
 	}
 
-	userIDStr, ok := userIDInterface.(string)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error userIDStr": "UserID is not a string"})
-		return
-	}
-
-	// Parse the userID string as UUID (only if needed later in the code)
-	userUUID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "UserID is not a valid UUID", "details": err.Error()})
-		return
-	}
-
-	orderID := c.Param("orderId")
-
-	db, exists := c.Get("db")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection not found"})
-		return
-	}
-	sqlxDB, ok := db.(*sqlx.DB)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid database connection"})
-		return
-	}
-
-	// Get the order from the database
-	order, err := repositories.GetOrder(sqlxDB, orderID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
-		return
-	}
-
-	// Ensure that the order is in the correct state
-	if order.Status != models.StatusExecuted {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Order cannot be settled in its current state"})
-		return
-	}
-
-	var settlementRequest SettlementRequest
-	if err := c.BindJSON(&settlementRequest); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "details": err.Error()})
-		return
-	}
-
-	/*orderType := "" */
-
-	if order.OrderType == "buy" {
-		orderType = "trt_shares_acquisition"
-	} else {
-		orderType = "trt_shares_sell"
-	}
-
-	assetType, err := repositories.GetAssetType(sqlxDB, order.AssetID)
-	if err != nil {
-		log.Fatalf("Error fetching assetType: %v", err)
-	}
-
-	/*fmt.Println(orderType)
-	/*transactionType, err := repositories.GetOrderType(sqlxDB, orderType)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong fetching orderType"})
-		return
-	} */
-
-	transactionType, err := repositories.GetTransactionTypeByOrderTypeID(sqlxDB, order.OrderType)
-	if err != nil {
-		log.Fatalf("Error fetching transactionTyper: %v", err)
-	}
-	orderNumber := orderutils.GenerateOrderNumber()
-
-	transactionRepo := transactionRepository.NewTransactionRepository(sqlxDB)
-	transactionService := transactionServices.NewTransactionService(transactionRepo)
-
-	clientCashTransaction := transactionModels.Transaction{
-
-		Id:                        uuid.New(),
-		Type:                      transactionType,
-		AssetId:                   order.AssetID,
-		CashAmount:                &settlementRequest.SettledAmount,
-		AssetQuantity:             &settlementRequest.SettledQuantity,
-		CashAccountId:             order.AccountID,
-		AssetAccountId:            order.AccountID,
-		AssetType:                 assetType,
-		TransactionCurrency:       order.Currency,
-		AssetPrice:                &order.PricePerUnit,
-		CreatedById:               userUUID,
-		UpdatedById:               userUUID,
-		CreatedAt:                 time.Now(),
-		UpdatedAt:                 time.Now(),
-		Corrected:                 false,
-		Canceled:                  false,
-		Comment:                   order.Comment,
-		TransactionOwnerId:        order.OwnerID,
-		TransactionOwnerAccountId: order.AccountID,
-		TradeDate:                 *settlementRequest.TradeDate,
-		SettlementDate:            *settlementRequest.SettlementDate,
-		OrderNumber:               orderNumber,
-	}
-
-	clientInstrumentTransaction := clientCashTransaction
-
-	houseAccount, err := accountutils.GetHouseAccount(c)
-	if err != nil {
-		log.Fatalf("Error getting house account: %v", err)
-		return
-	}
-
-	// Parse the houseAccount string into UUID
-	houseAccountUUID, err := uuid.Parse(houseAccount)
-	if err != nil {
-		log.Fatalf("Error parsing house account UUID: %v", err)
-		return
-	}
-
-	clientInstrumentTransaction.TransactionOwnerAccountId = houseAccountUUID
-
-	_, _, err = transactionService.CreateInstrumentPurchaseTransaction(c, order.AccountID, userUUID.String(), &clientCashTransaction, &clientInstrumentTransaction)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create transaction", "details": err.Error()})
-		return
-	}
-
-	fmt.Println(settlementRequest.SettledQuantity)
-	err = repositories.UpdateOrder(sqlxDB, orderID, settlementRequest.SettledQuantity, settlementRequest.SettledAmount, "settled", settlementRequest.TradeDate, settlementRequest.SettlementDate, settlementRequest.Comment)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order", "details": err.Error()})
-		return
-	}
-
-	// Release the reservation
-	err = repositories.ReleaseReservation(sqlxDB, orderID, houseAccount)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to release reservation", "details": err.Error()})
-		return
-	}
-
-	// Update account balance
-	/*fmt.Println("order total amount: %v", order.TotalAmount) */
-	fmt.Println("order accountID: %v", order.AccountID)
-	err = repositories.UpdateAccountBalance(sqlxDB, order.AccountID, order.TotalAmount)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
-		return
-	}
-
-	// Insert into holding
-	holding := positionmodel.Holding{
-		ID:        uuid.New(),
-		AccountID: order.AccountID,
-		AssetID:   order.AssetID,
-		Quantity:  order.Quantity,
-		// Populate other fields as needed
-	}
-
-	err = repositories.InsertHolding(sqlxDB, holding)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert into holding", "details": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Order settled successfully"})
 }
 
 func GetOrderTypeByName(c *gin.Context) {

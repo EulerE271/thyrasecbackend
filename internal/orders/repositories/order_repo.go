@@ -270,7 +270,7 @@ func (r *OrdersRepository) UpdateOrder(db *sqlx.Tx, orderID string, settledQuant
 	return err
 }
 
-func GetAssetType(db *sqlx.Tx, assetId uuid.UUID) (uuid.UUID, error) {
+func (r *OrdersRepository) GetAssetType(db *sqlx.Tx, assetId uuid.UUID) (uuid.UUID, error) {
 
 	var assetType uuid.UUID
 
