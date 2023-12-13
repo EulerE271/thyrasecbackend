@@ -9,12 +9,12 @@ import (
 )
 
 type SettlementHandler struct {
-	SetlementService *services.SettlementService
+	SettlementService *services.SettlementService
 }
 
 func NewSettlementHandler(settlementService *services.SettlementService) *SettlementHandler {
 	return &SettlementHandler{
-		SetlementService: settlementService,
+		SettlementService: settlementService,
 	}
 }
 
@@ -39,7 +39,7 @@ func (h *SettlementHandler) SettlementSellHandler(c *gin.Context) {
 		return
 	}
 
-	err := h.SetlementService.SellOrder(c, orderID, userIDStr, settlementRequest)
+	err := h.SettlementService.SellOrder(c, orderID, userIDStr, settlementRequest)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to settle order", "details": err.Error()})
 		return

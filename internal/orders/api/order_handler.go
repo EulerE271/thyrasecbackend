@@ -20,14 +20,14 @@ import (
 )
 
 type OrderHandler struct {
-	service *services.OrdersService
+	Service *services.OrdersService
 }
 
-func NewOrderHandler(service *services.OrdersService, transactionservice *transactionservice.TransactionService) *OrderHandler {
-	return &OrderHandler{service: service}
+func NewOrderHandler(Service *services.OrdersService, transactionservice *transactionservice.TransactionService) *OrderHandler {
+	return &OrderHandler{Service: Service}
 }
 
-func GetAllOrdersHandler(service *services.OrdersService) gin.HandlerFunc {
+func GetAllOrdersHandler(Service *services.OrdersService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		_, authUserRole, isAuthenticated := authutils.GetAuthenticatedUser(c)
 		if !isAuthenticated {
@@ -40,7 +40,7 @@ func GetAllOrdersHandler(service *services.OrdersService) gin.HandlerFunc {
 			return
 		}
 
-		orders, err := service.GetAllOrders()
+		orders, err := Service.GetAllOrders()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve orders", "details": err.Error()})
 			return
@@ -55,7 +55,7 @@ func GetAllOrdersHandler(service *services.OrdersService) gin.HandlerFunc {
 	}
 }
 
-func CreateBuyOrderHandler(service services.OrdersService) gin.HandlerFunc {
+func CreateBuyOrderHandler(Service services.OrdersService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var newOrder models.Order
 		if err := c.ShouldBindJSON(&newOrder); err != nil {
@@ -63,7 +63,7 @@ func CreateBuyOrderHandler(service services.OrdersService) gin.HandlerFunc {
 			return
 		}
 
-		createdOrder, err := service.CreateBuyOrder(newOrder)
+		createdOrder, err := Service.CreateBuyOrder(newOrder)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order", "details": err.Error()})
 			return
@@ -73,7 +73,7 @@ func CreateBuyOrderHandler(service services.OrdersService) gin.HandlerFunc {
 	}
 }
 
-func CreateSellOrderHandler(service services.OrdersService) gin.HandlerFunc {
+func CreateSellOrderHandler(Service services.OrdersService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var newOrder models.Order
 		if err := c.ShouldBindJSON(&newOrder); err != nil {
@@ -81,7 +81,7 @@ func CreateSellOrderHandler(service services.OrdersService) gin.HandlerFunc {
 			return
 		}
 
-		createdOrder, err := service.CreateSellOrder(newOrder)
+		createdOrder, err := Service.CreateSellOrder(newOrder)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order", "details": err.Error()})
 			return
@@ -91,7 +91,7 @@ func CreateSellOrderHandler(service services.OrdersService) gin.HandlerFunc {
 	}
 }
 
-func ConfirmOrderHandler(service services.OrdersService) gin.HandlerFunc {
+func ConfirmOrderHandler(Service services.OrdersService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		orderID := c.Param("orderId")
 
@@ -99,7 +99,7 @@ func ConfirmOrderHandler(service services.OrdersService) gin.HandlerFunc {
 		sqlxDB, _ := db.(*sqlx.DB)
 
 		// Check if the order exists and is in a state that can be confirmed
-		order, err := service.GetOrder(orderID)
+		order, err := Service.GetOrder(orderID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
 			return
@@ -111,7 +111,7 @@ func ConfirmOrderHandler(service services.OrdersService) gin.HandlerFunc {
 		}
 
 		// Perform specific actions for confirming an order
-		if err := service.ConfirmOrder(sqlxDB, orderID); err != nil {
+		if err := Service.ConfirmOrder(sqlxDB, orderID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm order", "details": err.Error()})
 			return
 		}
@@ -120,7 +120,7 @@ func ConfirmOrderHandler(service services.OrdersService) gin.HandlerFunc {
 	}
 }
 
-func ExecuteOrderHandler(service services.OrdersService) gin.HandlerFunc {
+func ExecuteOrderHandler(Service services.OrdersService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		orderID := c.Param("orderId")
@@ -129,7 +129,7 @@ func ExecuteOrderHandler(service services.OrdersService) gin.HandlerFunc {
 		sqlxDB, _ := db.(*sqlx.DB)
 
 		// Check if the order exists and is in a state that can be executed
-		order, err := service.GetOrder(orderID)
+		order, err := Service.GetOrder(orderID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
 			return
@@ -141,7 +141,7 @@ func ExecuteOrderHandler(service services.OrdersService) gin.HandlerFunc {
 		}
 
 		// Perform specific actions for executing an order
-		if err := service.ExecuteOrder(sqlxDB, orderID); err != nil {
+		if err := Service.ExecuteOrder(sqlxDB, orderID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to execute order", "details": err.Error()})
 			return
 		}
@@ -158,7 +158,7 @@ type SettlementRequest struct {
 	SettlementDate  *time.Time `json:"settlementDate"`
 }
 
-func SettlementBuyHandler(service services.OrdersService, transactionservice transactionservice.TransactionService) gin.HandlerFunc {
+func SettlementBuyHandler(Service services.OrdersService, transactionservice transactionservice.TransactionService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		userIDInterface, exists := c.Get("userID")
@@ -194,7 +194,7 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 		}
 
 		// Get the order from the database
-		order, err := service.GetOrder(orderID)
+		order, err := Service.GetOrder(orderID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve order", "details": err.Error()})
 			return
@@ -212,7 +212,7 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 			return
 		}
 
-		assetType, err := service.GetAssetType(order.AssetID)
+		assetType, err := Service.GetAssetType(order.AssetID)
 		if err != nil {
 			log.Fatalf("Error fetching assetType: %v", err)
 		}
@@ -224,7 +224,7 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 			return
 		} */
 
-		transactionType, err := service.GetTransactionTypeByOrderTypeID(order.OrderType)
+		transactionType, err := Service.GetTransactionTypeByOrderTypeID(order.OrderType)
 		if err != nil {
 			log.Fatalf("Error fetching transactionTyper: %v", err)
 		}
@@ -283,14 +283,14 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 		}
 
 		fmt.Println(settlementRequest.SettledQuantity)
-		err = service.UpdateOrder(orderID, settlementRequest.SettledQuantity, settlementRequest.SettledAmount, "settled", settlementRequest.TradeDate, settlementRequest.SettlementDate, settlementRequest.Comment)
+		err = Service.UpdateOrder(orderID, settlementRequest.SettledQuantity, settlementRequest.SettledAmount, "settled", settlementRequest.TradeDate, settlementRequest.SettlementDate, settlementRequest.Comment)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order", "details": err.Error()})
 			return
 		}
 
 		// Release the reservation
-		err = service.ReleaseReservation(orderID, houseAccount)
+		err = Service.ReleaseReservation(orderID, houseAccount)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to release reservation", "details": err.Error()})
 			return
@@ -299,7 +299,7 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 		// Update account balance
 		/*fmt.Println("order total amount: %v", order.TotalAmount) */
 		fmt.Println("order accountID: %v", order.AccountID)
-		err = service.UpdateAccountBalance(order.AccountID, order.TotalAmount)
+		err = Service.UpdateAccountBalance(order.AccountID, order.TotalAmount)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update account balance", "details": err.Error()})
 			return
@@ -314,7 +314,7 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 			// Populate other fields as needed
 		}
 
-		err = service.InsertHolding(holding)
+		err = Service.InsertHolding(holding)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert into holding", "details": err.Error()})
 			return
@@ -325,7 +325,7 @@ func SettlementBuyHandler(service services.OrdersService, transactionservice tra
 
 }
 
-func GetOrderTypeByName(service services.OrdersService) gin.HandlerFunc {
+func GetOrderTypeByName(Service services.OrdersService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		name := c.Query("name")
@@ -334,7 +334,7 @@ func GetOrderTypeByName(service services.OrdersService) gin.HandlerFunc {
 			return
 		}
 
-		orderType, err := service.GetOrderTypeByName(name)
+		orderType, err := Service.GetOrderTypeByName(name)
 		if err != nil {
 			// Handle errors, such as not finding the order type
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -346,7 +346,7 @@ func GetOrderTypeByName(service services.OrdersService) gin.HandlerFunc {
 	}
 }
 
-func GetOrderTypeByID(service services.OrdersService) gin.HandlerFunc {
+func GetOrderTypeByID(Service services.OrdersService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		id := c.Query("id")
@@ -356,7 +356,7 @@ func GetOrderTypeByID(service services.OrdersService) gin.HandlerFunc {
 
 		UUID := uuid.MustParse(id)
 
-		orderType, err := service.GetOrderType(UUID)
+		orderType, err := Service.GetOrderType(UUID)
 		if err != nil {
 			// Handle errors, such as not finding the order type
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
