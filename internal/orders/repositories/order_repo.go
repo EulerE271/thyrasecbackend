@@ -333,5 +333,3 @@ func (r *OrdersRepository) InsertCashReservation(tx *sqlx.Tx, order models.Order
 	_, err := tx.NamedExec(insertReservationQuery, reservationData)
 	return err
 }
-
-/**/
