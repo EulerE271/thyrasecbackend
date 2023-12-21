@@ -68,7 +68,7 @@ func (s *SettlementService) SellOrder(c *gin.Context, orderID, userIDStr string,
 
 	orderNumber := orderutils.GenerateOrderNumber()
 	transactionRepo := transactionrepo.NewTransactionRepository(tx)
-	transactionService := transactionservice.NewTransactionService(transactionRepo)
+	transactionService := transactionservice.NewTransactionService(transactionRepo, &sqlx.DB{})
 
 	clientCashTransaction := transactionmodels.Transaction{
 
@@ -98,7 +98,7 @@ func (s *SettlementService) SellOrder(c *gin.Context, orderID, userIDStr string,
 
 	clientInstrumentTransaction := clientCashTransaction
 
-	houseAccount, err := accountutils.GetHouseAccount(s.db)
+	houseAccount, err := accountutils.GetHouseAccount(tx)
 	if err != nil {
 		return err
 	}

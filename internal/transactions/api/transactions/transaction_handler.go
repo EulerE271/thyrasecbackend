@@ -48,7 +48,7 @@ func CreateDeposit(c *gin.Context) {
 
 	// Create a new repository and service instance
 	repo := repositories.NewTransactionRepository(&sqlx.Tx{})
-	service := services.NewTransactionService(repo)
+	service := services.NewTransactionService(repo, &sqlx.DB{})
 
 	// Use the service to create the deposit
 	debitTransactionID, creditTransactionID, err := service.CreateDeposit(c, userIDStr, newTransaction)
@@ -85,7 +85,7 @@ func CreateWithdrawal(c *gin.Context) {
 	// Create a new service instance
 	//tx := db.GetConnection(c)
 	repo := repositories.NewTransactionRepository(&sqlx.Tx{})
-	service := services.NewTransactionService(repo)
+	service := services.NewTransactionService(repo, &sqlx.DB{})
 
 	// Use the service to create the withdrawal
 	debitTransactionID, creditTransactionID, err := service.CreateWithdrawal(c, userIDStr, newTransaction)

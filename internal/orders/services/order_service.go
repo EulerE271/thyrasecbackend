@@ -238,7 +238,7 @@ func (s *OrdersService) CreateBuyOrder(newOrder models.Order) (models.Order, err
 		return models.Order{}, err
 	}
 
-	houseAccount, err := accountutils.GetHouseAccount(s.db) // Ensure this returns the house account ID
+	houseAccount, err := accountutils.GetHouseAccount(tx) // Ensure this returns the house account ID
 	if err != nil {
 		tx.Rollback()
 		log.Fatalf("error fetching house account: %v", err)

@@ -83,8 +83,8 @@ func main() {
 	utils.InitializePositionsModule(dbxConn, v1)
 
 	// Setup routes for other modules if needed
-	transactionroutes.SetupRoutes(v1)
-	orderroutes.SetupRoutes(v1)
+	transactionroutes.SetupRoutes(dbxConn, v1)
+	orderroutes.SetupRoutes(dbxConn, v1)
 	// Set up your routes by calling the SetupRoutes function from the "routes" package
 
 	// Start the server

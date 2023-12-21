@@ -10,7 +10,7 @@ import (
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
-func GetHouseAccount(db *sqlx.DB) (string, error) {
+func GetHouseAccount(db *sqlx.Tx) (string, error) {
 	if db == nil {
 		return "", fmt.Errorf("database connection is not initialized")
 	}
