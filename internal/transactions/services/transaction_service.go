@@ -68,14 +68,21 @@ func InsertParentTransaction(database *sqlx.DB, transaction *models.Transaction)
 
 type TransactionService struct {
 	transactionRepo repositories.TransactionRepository
+	db              *sqlx.DB
 }
 
-func NewTransactionService(transactionRepo repositories.TransactionRepository) *TransactionService {
-	return &TransactionService{transactionRepo: transactionRepo}
+func NewTransactionService(transactionRepo repositories.TransactionRepository, db *sqlx.DB) *TransactionService {
+	return &TransactionService{transactionRepo: transactionRepo, db: db}
 }
 
 func (s *TransactionService) CreateDeposit(c *gin.Context, userID string, transactionData *models.Transaction) (uuid.UUID, uuid.UUID, error) {
 	//Gets UUID for the current authenticated user
+
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return uuid.Nil, uuid.Nil, err
+	}
+
 	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, errors.New("invalid user ID")
@@ -85,7 +92,7 @@ func (s *TransactionService) CreateDeposit(c *gin.Context, userID string, transa
 	OrderNumber := orderutils.GenerateOrderNumber()
 
 	//Fetches house account
-	houseAccountID, err := accountutils.GetHouseAccount(c)
+	houseAccountID, err := accountutils.GetHouseAccount(tx)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
@@ -181,13 +188,18 @@ func (s *TransactionService) CreateDeposit(c *gin.Context, userID string, transa
 
 func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context, accountID uuid.UUID, userID string, transactionData *models.Transaction, transactionInstrumentData *models.Transaction) (uuid.UUID, uuid.UUID, error) {
 
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return uuid.Nil, uuid.Nil, err
+	}
+
 	/*	userUUID, err := uuid.Parse(userID)
 		if err != nil {
 			return uuid.Nil, uuid.Nil, errors.New("invalid user ID")
 		} */
 
 	//Fetches house account
-	houseAccountID, err := accountutils.GetHouseAccount(c)
+	houseAccountID, err := accountutils.GetHouseAccount(tx)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
@@ -308,13 +320,18 @@ func (s *TransactionService) CreateInstrumentPurchaseTransaction(c *gin.Context,
 
 func (s *TransactionService) CreateInstrumentSellTransaction(c *gin.Context, accountID uuid.UUID, userID string, transactionData *models.Transaction, transactionInstrumentData *models.Transaction) (uuid.UUID, uuid.UUID, error) {
 
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return uuid.Nil, uuid.Nil, err
+	}
+
 	/*	userUUID, err := uuid.Parse(userID)
 		if err != nil {
 			return uuid.Nil, uuid.Nil, errors.New("invalid user ID")
 		} */
 
 	//Fetches house account
-	houseAccountID, err := accountutils.GetHouseAccount(c)
+	houseAccountID, err := accountutils.GetHouseAccount(tx)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
@@ -435,6 +452,12 @@ func (s *TransactionService) CreateInstrumentSellTransaction(c *gin.Context, acc
 
 func (s *TransactionService) CreateWithdrawal(c *gin.Context, userID string, transactionData *models.Transaction) (uuid.UUID, uuid.UUID, error) {
 	//Gets UUID for the current authenticated user
+
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return uuid.Nil, uuid.Nil, err
+	}
+
 	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, errors.New("invalid user ID")
@@ -444,7 +467,7 @@ func (s *TransactionService) CreateWithdrawal(c *gin.Context, userID string, tra
 	OrderNumber := orderutils.GenerateOrderNumber()
 
 	//Fetches house account
-	houseAccountID, err := accountutils.GetHouseAccount(c)
+	houseAccountID, err := accountutils.GetHouseAccount(tx)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}

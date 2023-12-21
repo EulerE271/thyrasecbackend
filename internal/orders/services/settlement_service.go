@@ -4,7 +4,6 @@ import (
 	"errors"
 	ordermodels "thyra/internal/orders/models"
 	"thyra/internal/orders/repositories"
-	orderrepo "thyra/internal/orders/repositories"
 	orderutils "thyra/internal/orders/utils"
 	"time"
 
@@ -57,7 +56,7 @@ func (s *SettlementService) SellOrder(c *gin.Context, orderID, userIDStr string,
 		return errors.New("order cannot be settle in it's current state")
 	}
 
-	assetType, err := orderrepo.GetAssetType(tx, order.AssetID)
+	assetType, err := s.repo.GetAssetType(tx, order.AssetID)
 	if err != nil {
 		return err
 	}
