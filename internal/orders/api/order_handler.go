@@ -182,7 +182,7 @@ func SettlementBuyHandler(Service services.OrdersService, transactionservice tra
 
 		orderID := c.Param("orderId")
 
-		db, exists := c.Get("db")
+		/*db, exists := c.Get("db")
 		if !exists {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection not found"})
 			return
@@ -191,7 +191,7 @@ func SettlementBuyHandler(Service services.OrdersService, transactionservice tra
 		if !ok {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid database connection"})
 			return
-		}
+		}**/
 
 		// Get the order from the database
 		order, err := Service.GetOrder(orderID)
@@ -261,7 +261,7 @@ func SettlementBuyHandler(Service services.OrdersService, transactionservice tra
 
 		clientInstrumentTransaction := clientCashTransaction
 
-		houseAccount, err := accountutils.GetHouseAccount(sqlxDB)
+		houseAccount, err := accountutils.GetHouseAccount(&sqlx.Tx{})
 		if err != nil {
 			log.Fatalf("Error getting house account: %v", err)
 			return

@@ -6,7 +6,6 @@ import (
 	"thyra/internal/common/db"
 	helpers "thyra/internal/common/middleware"
 	"thyra/internal/common/utils"
-	orderroutes "thyra/internal/orders/routes"
 	transactionroutes "thyra/internal/transactions/routes"
 	"time"
 
@@ -83,8 +82,8 @@ func main() {
 	utils.InitializePositionsModule(dbxConn, v1)
 
 	// Setup routes for other modules if needed
-	transactionroutes.SetupRoutes(dbxConn, v1)
-	orderroutes.SetupRoutes(dbxConn, v1)
+	transactionroutes.SetupRoutes(v1)
+	//orderroutes.SetupRoutes(v1)
 	// Set up your routes by calling the SetupRoutes function from the "routes" package
 
 	// Start the server
